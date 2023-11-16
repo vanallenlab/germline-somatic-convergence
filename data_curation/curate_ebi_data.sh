@@ -15,7 +15,7 @@ export complex_data=~/Downloads/ebi_complex_portal
 
 
 # Curate EBI IntAct PPI data
-$CODEDIR/data_curation/curate_ebi_complexes.py \
+$CODEDIR/data_curation/curate_ebi_ppis.py \
   --out-tsv other_data/ebi_intact.all_interactions.tsv \
   $ppi_data/*.xml
 
