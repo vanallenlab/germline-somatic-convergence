@@ -23,6 +23,8 @@ def load_raw_csv(csv_in):
     # Read data
     df = pd.read_csv(csv_in, sep=',')
     df.rename(columns={df.columns[0] : 'idx'}, inplace=True)
+    if 'locations' not in df.columns:
+        df['locations'] = df.apply(lambda x: '{}:{}'.format(x.Chr_Id, int(x.Chr_Pos)), axis=1)
 
     # Extract coordinates and reformat as a pbt.BedTool with GWAS catalog index as feature name
     def _format_record(data):

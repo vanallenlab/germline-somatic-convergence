@@ -8,8 +8,8 @@
 
 
 # Set parameters
-cd ~/Dropbox\ \(Partners\ HealthCare\)/VALab_germline_somatic_2023
-export CODEDIR=/Users/ryan/Desktop/Collins/VanAllen/germ_som_pilot_2023/germline-somatic-exploration-2023
+cd ~/Dropbox\ \(Partners\ HealthCare\)/VanAllen/VALab_germline_somatic_2023
+export CODEDIR=/Users/ryan/Desktop/Collins/VanAllen/germline_somatic_convergence/germline-somatic-exploration-2023
 export ppi_data=~/Downloads/ebi_intact_db
 export complex_data=~/Downloads/ebi_complex_portal
 
