@@ -6,7 +6,7 @@
 
 
 # Set parameters
-cd ~/Dropbox\ \(Partners\ HealthCare\)/VALab_germline_somatic_2023
+cd ~/Dropbox\ \(Partners\ HealthCare\)/VanAllen/VALab_germline_somatic_2023
 export CODEDIR=/Users/ryan/Desktop/Collins/VanAllen/germline_somatic_convergence/germline-somatic-exploration-2023
 
 
@@ -93,5 +93,31 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
     <( echo -e "#cancer\tgermline_gene\tgermline_context\tsomatic_gene\tsomatic_context\tcriteria" ) \
     - \
   > results/VALab_germline_somatic_2023.pilot.gene_pairs.annotated.$som_coding_def.tsv
+done
+
+
+# Print summary of results for tables in slides
+res_tsv=results/VALab_germline_somatic_2023.pilot.gene_pairs.annotated.union.tsv
+for germ_context in coding noncoding; do
+  for som_context in coding noncoding; do
+    echo -e "\n\n\n==========\nGermline: $germ_context\nSomatic: $som_context\n=========="
+    awk -v gc=$germ_context -v sc=$som_context \
+      '{ if ($3==gc && $5==sc) print }' $res_tsv | wc -l \
+    | awk '{ print "Total pairs:", $1, "pairs\n" }'
+    for criteria in same_gene ligand_receptor known_ppi protein_complex; do
+      awk -v gc=$germ_context -v sc=$som_context -v cr=$criteria \
+        '{ if ($3==gc && $5==sc && $6 ~ cr) print }' $res_tsv | wc -l \
+      | awk -v cr=$criteria '{ print "\n*", cr, ":", $1, "pairs" }'
+      if [ $criteria == "same_gene" ]; then
+        awk -v gc=$germ_context -v sc=$som_context -v cr=$criteria -v OFS="\t" \
+          '{ if ($3==gc && $5==sc && $6 ~ cr) print $1, $2 }' $res_tsv \
+        | sort -Vk1,1 -k2,2V
+      else
+        awk -v gc=$germ_context -v sc=$som_context -v cr=$criteria -v OFS="\t" \
+          '{ if ($3==gc && $5==sc && $6 ~ cr) print $1, $2, $4 }' $res_tsv \
+        | sort -Vk1,1 -k2,2V -k3,3V
+      fi
+    done
+  done
 done
 

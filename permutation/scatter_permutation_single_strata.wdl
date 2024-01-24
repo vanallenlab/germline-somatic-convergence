@@ -15,6 +15,7 @@ workflow RunPermutations {
   input {
     # Empirically observed overlaps
     File observed_overlaps_tsv
+    File expression_quantile_gene_counts_tsv
     String output_prefix
 
     # Data required for each permutation
@@ -25,6 +26,8 @@ workflow RunPermutations {
     File noncoding_gwas_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
+    File expression_quantiles
+
 
     # Reference files for assessing overlap
     File cellchat_tsv
@@ -99,6 +102,54 @@ workflow RunPermutations {
         mem_gb = mem_gb_per_shard,
         disk_gb = disk_gb_per_shard
     }
+
+    # One set of permutations with tissue-specific expression quantile matching
+    call PermuteOverlaps as PermuteExpression {
+      input:
+        strata_gene_counts_tsv = strata_gene_counts_tsv,
+        coding_nonsyn_weights = uniform_weights,
+        coding_gwas_weights = uniform_weights,
+        noncoding_gwas_weights = uniform_weights,
+        somatic_noncoding_weights = uniform_weights,
+        eligible_gene_symbols = eligible_gene_symbols,
+        expression_quantiles = expression_quantiles,
+        expression_quantile_gene_counts_tsv = expression_quantile_gene_counts_tsv,
+        cellchat_tsv = cellchat_tsv,
+        ppi_tsv = ppi_tsv,
+        complexes_tsv = complexes_tsv,
+        shuffle_script = shuffle_script,
+        find_pairs_script = find_pairs_script,
+        shard_number = shard_number,
+        n_perm_per_shard = n_perm_per_shard,
+        docker = docker,
+        n_cpu = n_cpu_per_shard,
+        mem_gb = mem_gb_per_shard,
+        disk_gb = disk_gb_per_shard
+    }
+
+    # One set of permutations combining expression quantile-matching and custom prior weights
+    call PermuteOverlaps as PermuteComposite {
+      input:
+        strata_gene_counts_tsv = strata_gene_counts_tsv,
+        coding_nonsyn_weights = coding_nonsyn_weights,
+        coding_gwas_weights = coding_gwas_weights,
+        noncoding_gwas_weights = noncoding_gwas_weights,
+        somatic_noncoding_weights = somatic_noncoding_weights,
+        eligible_gene_symbols = eligible_gene_symbols,
+        expression_quantiles = expression_quantiles,
+        expression_quantile_gene_counts_tsv = expression_quantile_gene_counts_tsv,
+        cellchat_tsv = cellchat_tsv,
+        ppi_tsv = ppi_tsv,
+        complexes_tsv = complexes_tsv,
+        shuffle_script = shuffle_script,
+        find_pairs_script = find_pairs_script,
+        shard_number = shard_number,
+        n_perm_per_shard = n_perm_per_shard,
+        docker = docker,
+        n_cpu = n_cpu_per_shard,
+        mem_gb = mem_gb_per_shard,
+        disk_gb = disk_gb_per_shard
+    }
   }
 
   # Concatenate results from uniformly weighted permutations
@@ -147,10 +198,56 @@ workflow RunPermutations {
       disk_gb = analysis_disk_gb
   }
 
+  # Concatenate results from expression quantile-matched permutations
+  call Utils.ConcatTextFiles as ConcatExpression {
+    input:
+      shards = PermuteExpression.results_tsv,
+      compression_command = "gzip -c",
+      output_filename = "germ_som_convergence.permutation_results.expression_weighting.n" + total_n_perms + ".txt.gz",
+      docker = docker
+  }
+
+  # Compare expression quantile-matched permuted results to empirically observed results
+  call ComparePermutedAndEmpirical as AnalyzeExpression {
+    input:
+      observed_overlaps_tsv = observed_overlaps_tsv,
+      permuted_overlaps_tsv = ConcatExpression.merged_file,
+      cancers = PermuteExpression.cancers[0],
+      analysis_script = analysis_script,
+      output_prefix = "expression_permutation",
+      docker = docker,
+      n_cpu = analysis_n_cpu,
+      mem_gb = analysis_mem_gb,
+      disk_gb = analysis_disk_gb
+  }
+
+  # Concatenate results from composite weighted permutations
+  call Utils.ConcatTextFiles as ConcatComposite {
+    input:
+      shards = PermuteComposite.results_tsv,
+      compression_command = "gzip -c",
+      output_filename = "germ_som_convergence.permutation_results.composite_weighting.n" + total_n_perms + ".txt.gz",
+      docker = docker
+  }
+
+  # Compare composite permuted results to empirically observed results
+  call ComparePermutedAndEmpirical as AnalyzeComposite {
+    input:
+      observed_overlaps_tsv = observed_overlaps_tsv,
+      permuted_overlaps_tsv = ConcatComposite.merged_file,
+      cancers = PermuteComposite.cancers[0],
+      analysis_script = analysis_script,
+      output_prefix = "composite_permutation",
+      docker = docker,
+      n_cpu = analysis_n_cpu,
+      mem_gb = analysis_mem_gb,
+      disk_gb = analysis_disk_gb
+  }
+
   # Bundle all results as a single tarball for returning to parent workflow
   call BundleOutputs {
     input:
-      tarballs = [AnalyzeUniform.results_tarball, AnalyzeBayesian.results_tarball],
+      tarballs = [AnalyzeUniform.results_tarball, AnalyzeBayesian.results_tarball, AnalyzeExpression.results_tarball, AnalyzeComposite.results_tarball],
       output_prefix = output_prefix,
       docker = docker
   }
@@ -169,7 +266,8 @@ task PermuteOverlaps {
     File noncoding_gwas_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
-    Boolean cancer_specific_weights = false
+    File? expression_quantiles
+    File? expression_quantile_gene_counts_tsv
 
     File cellchat_tsv
     File ppi_tsv
@@ -260,27 +358,45 @@ task PermuteOverlaps {
         sp5="$i"
         seed="${sp1}${sp2}${sp3}${sp4}${sp5}"
 
-        # Shuffle genes, restrict to eligible gene symbols, and sample desired number
-        if [ "~{cancer_specific_weights}" == "true" ]; then
-          Rscript ~{shuffle_script} \
-            --tsv-in $weights \
-            --seed "$seed" \
-            --cancer $cancer \
-            --eligible-genes $elig_list \
-            --outfile tmp.shuffled.genes.list
+        if [ ~{defined(expression_quantiles)} == "true" ] && \
+           [ ~{defined(expression_quantile_gene_counts_tsv)} == "true"]; then
+          # Shuffle & sample each expression quantile separately, if optioned
+          while read q n; do
+            if [ $n -eq 0 ]; then
+              continue
+            fi
+            # Define list of genes in this expression quantile in this tissue
+            awk -v FS="\t" -v cancer=$cancer -v q=$q \
+              '{ if ($2==q && $3==cancer) print $1 }' \
+              ~{expression_quantiles} \
+            | fgrep -xf $elig_list \
+            | sort -V > $cancer.gex_q$q.genes.list
+            # Shuffle genes, restrict to eligible gene symbols, and sample desired number
+            Rscript ~{shuffle_script} \
+              --tsv-in $weights \
+              --seed "$seed" \
+              --eligible-genes $cancer.gex_q$q.genes.list \
+              --outfile tmp.shuffled.genes.list
+            # Note: need to break this up to avoid Rcript throwing SIGPIPE error
+            head -n $n tmp.shuffled.genes.list \
+            >> gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+          done < <( awk -v FS="\t" -v OFS="\t" -v cancer=$cancer -v origin=$origin -v context=$context \
+                      '{ if ($1==cancer && $3==origin && $4==context) print $2, $5 }' \
+                      ~{expression_quantile_gene_counts_tsv} )
         else
-          Rscript ~{shuffle_script} \
-            --tsv-in $weights \
-            --seed "$seed" \
-            --eligible-genes $elig_list \
-            --outfile tmp.shuffled.genes.list
-        fi
-        # Note: need to break this up to avoid Rcript throwing SIGPIPE error
-        if [ $n_genes -gt 0 ]; then
-          head -n $n_genes tmp.shuffled.genes.list \
-          > gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
-        else
-          touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+          if [ $n_genes -gt 0 ]; then
+            # Shuffle genes, restrict to eligible gene symbols, and sample desired number
+            Rscript ~{shuffle_script} \
+              --tsv-in $weights \
+              --seed "$seed" \
+              --eligible-genes $elig_list \
+              --outfile tmp.shuffled.genes.list
+            # Note: need to break this up to avoid Rcript throwing SIGPIPE error
+            head -n $n_genes tmp.shuffled.genes.list \
+            > gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+          else
+            touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+          fi
         fi
 
       done < ~{strata_gene_counts_tsv}

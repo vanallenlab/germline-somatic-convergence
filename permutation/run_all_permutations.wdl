@@ -16,6 +16,7 @@ workflow ScatterPermutations {
     # Empirically observed overlaps
     Array[File] observed_overlaps_tsvs
     Array[File] strata_gene_count_tsvs
+    Array[File] expression_quantile_gene_counts_tsvs
     Array[String] overlap_prefixes
 
     # Data required for each permutation
@@ -25,6 +26,7 @@ workflow ScatterPermutations {
     File noncoding_gwas_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
+    File expression_quantiles
 
     # Reference files for assessing overlap
     File cellchat_tsv
@@ -58,14 +60,16 @@ workflow ScatterPermutations {
     call Permute.RunPermutations as RunPermutations {
       input:
       observed_overlaps_tsv = observed_overlaps_tsvs[i],
-      output_prefix = strata_gene_count_tsvs[i],
-      strata_gene_counts_tsv = overlap_prefixes[i],
+      output_prefix = overlap_prefixes[i],
+      strata_gene_counts_tsv = strata_gene_count_tsvs[i],
       uniform_weights = uniform_weights,
       coding_nonsyn_weights = coding_nonsyn_weights,
       coding_gwas_weights = coding_gwas_weights,
       noncoding_gwas_weights = noncoding_gwas_weights,
       somatic_noncoding_weights = somatic_noncoding_weights,
       eligible_gene_symbols = eligible_gene_symbols,
+      expression_quantiles = expression_quantiles,
+      expression_quantile_gene_counts_tsv = expression_quantile_gene_counts_tsvs[i],
       cellchat_tsv = cellchat_tsv,
       ppi_tsv = ppi_tsv,
       complexes_tsv = complexes_tsv,

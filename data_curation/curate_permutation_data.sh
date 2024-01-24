@@ -37,7 +37,7 @@ awk -v OFS="\t" '{ print $1, "1" }' \
 ################################
 # Subset GTF to gene bodies of autosomal protein-coding genes
 zcat $WRKDIR/gencode.v44.annotation.gtf.gz \
-| fgrep -wf other_data/gencode.v44.autosomal.protein_coding.genes.list \
+| fgrep -xf other_data/gencode.v44.autosomal.protein_coding.genes.list \
 | awk -v OFS="\t" '{ if ($3=="gene" && $1 !~ /chrX|chrY|chrM/) print $1, $4, $5, $14 }' \
 | tr -d '";' | sort -Vk1,1 -k2,2n -k3,3n -k4,4V | bgzip -c \
 > $WRKDIR/gencode.v44.autosomal.protein_coding.genes.bed.gz
@@ -63,7 +63,7 @@ zcat \
   $WRKDIR/gencode.v44.autosomal.protein_coding.genes.bed.gz \
   $WRKDIR/intergenic_blocks.upstream.bed.gz \
   $WRKDIR/intergenic_blocks.downstream.bed.gz \
-| fgrep -wf other_data/gencode.v44.autosomal.protein_coding.genes.list \
+| fgrep -xf other_data/gencode.v44.autosomal.protein_coding.genes.list \
 | sort -Vk1,1 -k2,2n -k3,3n -k4,4V | bgzip -c \
 > $WRKDIR/all_gene_territories.bed.gz
 $CODEDIR/data_curation/collect_gene_territory_weights.py \
@@ -147,50 +147,116 @@ bedtools intersect -v \
 $CODEDIR/data_curation/curate_gtex_expression.R
 
 
-###################################################################################
-# 7. Make composite weights by multiplying Bayesian priors with expression values #
-###################################################################################
-for suffix in coding_nonsynonymous hrc_coding_snps \
-              hrc_noncoding_snps genome_territory; do
-  $CODEDIR/data_curation/multiply_weights_by_expression.R \
-    other_data/permutation_weights/gene_weights.$suffix.tsv \
-    other_data/permutation_weights/gene_weights.expression.cancer_specific.tsv \
-    other_data/permutation_weights/gene_weights.$suffix.composite.cancer_specific.tsv
-done
-
-
 ###################################################
-# 8. Count of genes to be sampled for each strata #
+# 7. Count of genes to be sampled for each strata #
 ###################################################
 # Re-curate COSMIC-only gene lists to identify how many *new* genes are implicated
 # by coding GWAS hits
 mkdir $WRKDIR/cosmic_tmp/
 $CODEDIR/data_curation/curate_cosmic_genes.R $WRKDIR/cosmic_tmp/
 
-# Loop over all strata and count genes
-for cancer in breast colorectal lung prostate renal; do
-  # COSMIC germline coding
-  cat $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list | wc -l \
-  | paste <( echo -e "$cancer\tgermline\tcoding_cosmic" ) -
+# One set of counts for each definition of somatic coding variants
+for som_coding_def in union intersection cosmic_only intogen_only; do
+  # Loop over all strata and count genes
+  for cancer in breast colorectal lung prostate renal; do
+    # COSMIC germline coding
+    cat $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list | wc -l \
+    | paste <( echo -e "$cancer\tgermline\tcoding_cosmic" ) -
 
-  # Other germline coding contributed by GWAS (after excluding COSMIC)
-  idx=$( head -n1 gene_lists/germline_non_organized/${cancer}_gwas_catalog_sig_filtered.annotated.tsv \
-         | sed 's/\t/\n/g' | awk '{ if ($1=="mappedGenes") print NR }' )
-  awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
-    gene_lists/germline_non_organized/${cancer}_gwas_catalog_sig_filtered.annotated.tsv \
-  | fgrep -wvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
-  | wc -l | paste <( echo -e "$cancer\tgermline\tcoding_gwas" ) -
+    # Other germline coding contributed by GWAS (after excluding COSMIC)
+    idx=$( head -n1 gene_lists/germline_non_organized/${cancer}_gwas_catalog_sig_filtered.annotated.tsv \
+           | sed 's/\t/\n/g' | awk '{ if ($1=="mappedGenes") print NR }' )
+    awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
+      gene_lists/germline_non_organized/${cancer}_gwas_catalog_sig_filtered.annotated.tsv \
+    | fgrep -xvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
+    | wc -l | paste <( echo -e "$cancer\tgermline\tcoding_gwas" ) -
 
-  # Germline noncoding
-  cat gene_lists/germline_noncoding/$cancer.germline.noncoding.genes.list | wc -l \
-  | paste <( echo -e "$cancer\tgermline\tnoncoding" ) -
+    # Germline & somatic noncoding
+    for origin in germline somatic; do
+      cat gene_lists/${origin}_noncoding/$cancer.$origin.noncoding.genes.list | wc -l \
+      | paste <( echo -e "$cancer\t$origin\tnoncoding" ) -
+    done
 
-  # Somatic coding & noncoding
-  for context in coding noncoding; do
-    cat gene_lists/somatic_$context/$cancer.somatic.$context.genes.list | wc -l \
-    | paste <( echo -e "$cancer\tsomatic\t${context}" ) -
-  done
-done > other_data/permutation_gene_counts.tsv
+    # Somatic coding depends on definition being used
+    case $som_coding_def in
+      union)
+        som_coding_genes=gene_lists/somatic_coding/$cancer.somatic.coding.genes.list
+        ;;
+      intersection)
+        som_coding_genes=other_data/cosmic_intogen_intersection/somatic_coding/$cancer.somatic.coding.genes.list
+        ;;
+      cosmic_only)
+        som_coding_genes=other_data/cosmic_genes/somatic_coding/$cancer.somatic.coding.genes.list
+        ;;
+      intogen_only)
+        som_coding_genes=other_data/intogen_genes/somatic_coding/$cancer.somatic.coding.genes.list
+        ;;
+    esac
+    cat $som_coding_genes | wc -l | paste <( echo -e "$cancer\tsomatic\tcoding" ) -
+  done > other_data/permutation_gene_counts.$som_coding_def.tsv
+done
+
+
+###################################################################
+# 8. Count of genes per strata per expression quantile per tissue #
+###################################################################
+n_gex_bins=$( sed '1d' other_data/permutation_weights/gene_weights.expression.cancer_specific.tsv \
+              | cut -f2 | sort -nr | sed -n '1p' )
+mkdir $WRKDIR/gex_elig_lists_tmp
+# One set of counts for each definition of somatic coding variants
+for som_coding_def in union intersection cosmic_only intogen_only; do
+  # Loop over all strata and count genes
+  for cancer in breast colorectal lung prostate renal; do
+    # Gather counts per expression quantile
+    for q in $( seq 1 $n_gex_bins ); do
+      # Define background list of genes in this quantile
+      awk -v cancer=$cancer -v q=$q -v FS="\t" \
+        '{ if ($2==q && $3==cancer) print $1 }' \
+        other_data/permutation_weights/gene_weights.expression.cancer_specific.tsv \
+      > $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list
+      
+      # COSMIC germline coding
+      fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
+        $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list | wc -l \
+      | paste <( echo -e "$cancer\t$q\tgermline\tcoding_cosmic" ) -
+
+      # Other germline coding contributed by GWAS (after excluding COSMIC)
+      idx=$( head -n1 gene_lists/germline_non_organized/${cancer}_gwas_catalog_sig_filtered.annotated.tsv \
+             | sed 's/\t/\n/g' | awk '{ if ($1=="mappedGenes") print NR }' )
+      awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
+        gene_lists/germline_non_organized/${cancer}_gwas_catalog_sig_filtered.annotated.tsv \
+      | fgrep -xvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
+      | fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
+      | wc -l | paste <( echo -e "$cancer\t$q\tgermline\tcoding_gwas" ) -
+
+      # Germline & somatic noncoding
+      for origin in germline somatic; do
+        fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
+          gene_lists/${origin}_noncoding/$cancer.$origin.noncoding.genes.list | wc -l \
+        | paste <( echo -e "$cancer\t$q\t$origin\tnoncoding" ) -
+      done
+
+      # Somatic coding depends on definition being used
+      case $som_coding_def in
+        union)
+          som_coding_genes=gene_lists/somatic_coding/$cancer.somatic.coding.genes.list
+          ;;
+        intersection)
+          som_coding_genes=other_data/cosmic_intogen_intersection/somatic_coding/$cancer.somatic.coding.genes.list
+          ;;
+        cosmic_only)
+          som_coding_genes=other_data/cosmic_genes/somatic_coding/$cancer.somatic.coding.genes.list
+          ;;
+        intogen_only)
+          som_coding_genes=other_data/intogen_genes/somatic_coding/$cancer.somatic.coding.genes.list
+          ;;
+      esac
+      fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
+        $som_coding_genes | wc -l \
+      | paste <( echo -e "$cancer\t$q\tsomatic\tcoding" ) -
+    done
+  done > other_data/gene_counts_per_expression_quantile.$som_coding_def.tsv
+done
 
 
 ###############
