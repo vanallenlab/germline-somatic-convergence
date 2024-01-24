@@ -363,7 +363,7 @@ task PermuteOverlaps {
           # Shuffle & sample each expression quantile separately, if optioned
           while read q n; do
             if [ $n -eq 0 ]; then
-              
+              continue
             fi
             # Define list of genes in this expression quantile in this tissue
             awk -v FS="\t" -v cancer=$cancer -v q=$q \
