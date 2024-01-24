@@ -359,11 +359,11 @@ task PermuteOverlaps {
         seed="${sp1}${sp2}${sp3}${sp4}${sp5}"
 
         if [ ~{defined(expression_quantiles)} == "true" ] && \
-           [ ~{defined(expression_quantile_gene_counts_tsv)} == "true"]; then
+           [ ~{defined(expression_quantile_gene_counts_tsv)} == "true" ]; then
           # Shuffle & sample each expression quantile separately, if optioned
           while read q n; do
             if [ $n -eq 0 ]; then
-              continue
+              
             fi
             # Define list of genes in this expression quantile in this tissue
             awk -v FS="\t" -v cancer=$cancer -v q=$q \
