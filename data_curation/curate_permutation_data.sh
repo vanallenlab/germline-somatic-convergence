@@ -37,7 +37,7 @@ awk -v OFS="\t" '{ print $1, "1" }' \
 ################################
 # Subset GTF to gene bodies of autosomal protein-coding genes
 zcat $WRKDIR/gencode.v44.annotation.gtf.gz \
-| fgrep -xf other_data/gencode.v44.autosomal.protein_coding.genes.list \
+| fgrep -wf other_data/gencode.v44.autosomal.protein_coding.genes.list \
 | awk -v OFS="\t" '{ if ($3=="gene" && $1 !~ /chrX|chrY|chrM/) print $1, $4, $5, $14 }' \
 | tr -d '";' | sort -Vk1,1 -k2,2n -k3,3n -k4,4V | bgzip -c \
 > $WRKDIR/gencode.v44.autosomal.protein_coding.genes.bed.gz
@@ -63,7 +63,7 @@ zcat \
   $WRKDIR/gencode.v44.autosomal.protein_coding.genes.bed.gz \
   $WRKDIR/intergenic_blocks.upstream.bed.gz \
   $WRKDIR/intergenic_blocks.downstream.bed.gz \
-| fgrep -xf other_data/gencode.v44.autosomal.protein_coding.genes.list \
+| fgrep -wf other_data/gencode.v44.autosomal.protein_coding.genes.list \
 | sort -Vk1,1 -k2,2n -k3,3n -k4,4V | bgzip -c \
 > $WRKDIR/all_gene_territories.bed.gz
 $CODEDIR/data_curation/collect_gene_territory_weights.py \

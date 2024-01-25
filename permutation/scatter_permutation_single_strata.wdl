@@ -372,9 +372,10 @@ task PermuteOverlaps {
             | fgrep -xf $elig_list \
             | sort -V > $cancer.gex_q$q.genes.list
             # Shuffle genes, restrict to eligible gene symbols, and sample desired number
+            qseed="${seed}${q}"
             Rscript ~{shuffle_script} \
               --tsv-in $weights \
-              --seed "$seed" \
+              --seed "$qseed" \
               --eligible-genes $cancer.gex_q$q.genes.list \
               --outfile tmp.shuffled.genes.list
             # Note: need to break this up to avoid Rcript throwing SIGPIPE error
