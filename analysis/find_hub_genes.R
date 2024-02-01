@@ -14,7 +14,7 @@ options(scipen=1000, stringsAsFactors=FALSE)
 setwd("~/Dropbox (Partners HealthCare)/VanAllen/VALab_germline_somatic_2023/")
 
 # Load all gene pairs
-pairs <- read.table("results/VALab_germline_somatic_2023.pilot.gene_pairs.annotated.tsv",
+pairs <- read.table("results/VALab_germline_somatic_2023.pilot.gene_pairs.annotated.union.tsv",
                     header=T, sep="\t", comment.char="", check.names=F)
 colnames(pairs)[1] <- gsub("^#", "", colnames(pairs)[1])
 
@@ -27,7 +27,7 @@ pairs <- pairs[-drop.idx, ]
 # Count number of times each gene appears in a germline:somatic pair
 all.genes <- sort(unique(c(pairs$germline_gene, pairs$somatic_gene)))
 gene.counts <- sort(sapply(all.genes, function(g){length(which(pairs$germline_gene == g | pairs$somatic_gene == g))}), decreasing=TRUE)
-gene.counts.plot <- rev(gene.counts[which(gene.counts>1)])
+gene.counts.plot <- rev(gene.counts[which(gene.counts>=4)])
 pdf("results/pairs_per_gene.barplot.pdf", height=4.5, width=2)
 par(mar=c(0.25, 4, 1, 0.25))
 h <- barplot(gene.counts.plot, horiz=T, xaxs="i", yaxs="i", xaxt="n",
@@ -41,7 +41,7 @@ sapply(1:length(gene.counts.plot), function(i){
 dev.off()
 
 # Print list of pairs involving top genes
-for(gene in names(gene.counts[which(gene.counts >= 4)])){
+for(gene in names(gene.counts[which(gene.counts >= 6)])){
   cat(paste("\n\n", gene, ":", sep=""))
   print(pairs[which(pairs$germline_gene == gene | pairs$somatic_gene == gene), ])
 }
