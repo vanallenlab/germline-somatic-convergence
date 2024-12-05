@@ -1,8 +1,11 @@
-# Germline:Somatic Exploration 2023  
+# Germline:somatic convergence project  
 
-Copyright (c) 2023-Present Samantha Hoffman, Ryan Collins, and the Van Allen Lab @ DFCI  
-Contact: [Sam Hoffman](mailto:samantha_hoffman@hms.harvard.edu) or [Ryan Collins](mailto:Ryan_Collins@dfci.harvard.edu)  
+Copyright (c) 2023-Present Ryan Collins, Noah Fields, Claire Johnson, Samantha Hoffman, and the Van Allen Lab @ DFCI  
+Contact: [Ryan Collins](mailto:Ryan_Collins@dfci.harvard.edu)  
 Code provided under the terms of the GNU GPL v2.0 (see `LICENSE`)
 
 ---  
-Pilot exploration of overlap between germline and somatic alterations in common adult solid tumors  
+
+Exploration of convergence between germline & somatic genetic factors in common adult cancers.  
+
+This repository is a work in progress. More documentation will be added as it matures.  
