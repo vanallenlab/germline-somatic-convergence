@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Germline:Somatic Exploratory Pilot Analysis 2023
-# Copyright (c) 2023 Sam Hoffman, Ryan Collins, and the Van Allen Lab @ Dana-Farber Cancer Institute
+# Copyright (c) 2023 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
 # Find candidate "hub" genes involved in several independent germline:somatic pairs

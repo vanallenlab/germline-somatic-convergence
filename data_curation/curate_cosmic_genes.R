@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Germline:Somatic Exploratory Pilot Analysis 2023
-# Copyright (c) 2023 Sam Hoffman, Ryan Collins, and the Van Allen Lab @ Dana-Farber Cancer Institute
+# Copyright (c) 2023 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
 # Code to curate COSMIC gene lists of germline and somatic drivers
@@ -9,7 +9,7 @@
 # Set parameters
 options(scipen=1000, stringsAsFactors=F)
 setwd("~/Dropbox (Partners HealthCare)/VanAllen/VALab_germline_somatic_2023/")
-cosmic.in <- "other_data/COSMIC.CGC.10_26_23.tsv"
+cosmic.in <- "other_data/COSMIC.CGC.12_05_24.tsv"
 args <- commandArgs(trailingOnly=TRUE)
 if(length(args) > 0){
   outdir <- as.character(args[1])
@@ -34,17 +34,18 @@ cancer.map <- list("Breast" = c("breast", "breast cancer", "breast carcinoma",
                                 "phyllodes tumour", "phyllodes tumour of the breast",
                                 "secretory breast"),
                    "Colorectal" = c("colon", "colon adenocarcinoma", "colon cancer",
-                                     "colon carcinoma", "colorectal",
-                                     "colorectal adenocarcinoma", "colorectal cancer",
-                                     "colorectal cancer susceptibility", "CRC",
-                                     "large intestine", "large intestine carcinoma"),
+                                    "colon carcinoma", "colorectal",
+                                    "colorectal adenocarcinoma", "colorectal cancer",
+                                    "colorectal cancer susceptibility", "CRC",
+                                    "large intestine", "large intestine carcinoma",
+                                    "rectal cancer"),
                    "Lung" = c("lung", "lung adenocarcinoma", "lung cancer",
                               "lung carcinoma", "lung SCC", "Lung SCC", "NSCLC",
                               "SCLC", "small cell lung carcinoma"),
                    "Melanoma" = c("cutaneous melanoma", "desmoplastic melanoma",
                                   "malignant melanoma of soft parts", "melanoma",
                                   "mucosal melanoma", "skin and uveal melanoma",
-                                  "uveal melanoma"),
+                                  "uveal melanoma", "malignant melanoma"),
                    "Prostate" = c("prostae adenocarcinoma", "prostate",
                                   "prostate cancer", "prostate carcinoma"),
                    "Renal" = c("CCRCC", "clear cell renal carcinoma",

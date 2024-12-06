@@ -1,5 +1,5 @@
 # Germline:Somatic Exploratory Pilot Analysis 2023
-# Copyright (c) 2023 Sam Hoffman, Ryan Collins, and the Van Allen Lab @ Dana-Farber Cancer Institute
+# Copyright (c) 2023 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
 # Bash code to identify all germline:somatic overlaps among candidate genes
@@ -7,7 +7,7 @@
 
 # Set parameters
 cd ~/Dropbox\ \(Partners\ HealthCare\)/VanAllen/VALab_germline_somatic_2023
-export CODEDIR=/Users/ryan/Desktop/Collins/VanAllen/germline_somatic_convergence/germline-somatic-exploration-2023
+export CODEDIR=/Users/ryan/Desktop/Collins/VanAllen/germline_somatic_convergence/germline-somatic-convergence
 
 
 # Prep output directory
@@ -92,12 +92,12 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
   | cat \
     <( echo -e "#cancer\tgermline_gene\tgermline_context\tsomatic_gene\tsomatic_context\tcriteria" ) \
     - \
-  > results/VALab_germline_somatic_2023.pilot.gene_pairs.annotated.$som_coding_def.tsv
+  > results/VALab_germline_somatic_2024.v2.gene_pairs.annotated.$som_coding_def.tsv
 done
 
 
 # Print summary of results for tables in slides
-res_tsv=results/VALab_germline_somatic_2023.pilot.gene_pairs.annotated.union.tsv
+res_tsv=results/VALab_germline_somatic_2024.v2.gene_pairs.annotated.union.tsv
 for germ_context in coding noncoding; do
   for som_context in coding noncoding; do
     echo -e "\n\n\n==========\nGermline: $germ_context\nSomatic: $som_context\n=========="

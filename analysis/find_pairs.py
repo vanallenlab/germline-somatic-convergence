@@ -9,6 +9,7 @@ Identify pairs of related genes from two input gene lists
 """
 
 import argparse
+import itertools
 import pandas as pd
 from sys import stdout
 
@@ -59,10 +60,10 @@ def find_complex_pairs(gg, sg, complexes):
 
     for cpx in complexes:
         g_hits = gg.intersection(cpx)
-        s_hits = sg.intersection(cpx).difference(g_hits)
-        if len(g_hits) > 0 and len(s_hits) > 0:
-            for g in g_hits:
-                for s in s_hits:
+        s_hits = sg.intersection(cpx)
+        for g in g_hits:
+            for s in s_hits:
+                if g != s:
                     pairs.append((g, s, ))
 
     return pairs

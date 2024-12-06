@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Germline:Somatic Convergence Analysis 2023
-# Copyright (c) 2023 Sam Hoffman, Ryan Collins, and the Van Allen Lab @ Dana-Farber Cancer Institute
+# Copyright (c) 2023 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
 # Code to curate IntOGen somatic driver gene lists
@@ -9,7 +9,7 @@
 # Set parameters
 options(scipen=1000, stringsAsFactors=F)
 setwd("~/Dropbox (Partners HealthCare)/VanAllen/VALab_germline_somatic_2023")
-intogen.in <- "other_data/2023-05-31_IntOGen-Drivers/Compendium_Cancer_Genes.tsv"
+intogen.in <- "other_data/2024-06-18_IntOGen-Drivers/Compendium_Cancer_Genes.tsv"
 args <- commandArgs(trailingOnly=TRUE)
 if(length(args) > 0){
   outdir <- as.character(args[1])

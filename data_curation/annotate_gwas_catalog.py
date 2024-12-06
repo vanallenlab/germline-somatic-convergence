@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2023-Present Samantha Hoffman, Ryan Collins, and the Van Allen Lab @ DFCI  
+# Copyright (c) 2023-Present Ryan Collins and the Van Allen Lab @ DFCI  
 # Distributed under terms of the GPL-2.0 License (see LICENSE)
 
 """
-Annotate GWAS catalog .csv versus GTF
+Annotate GWAS catalog .tsv versus GTF
 """
+
 
 import argparse
 import pandas as pd
@@ -14,23 +15,26 @@ import pybedtools as pbt
 from re import sub
 
 
-def load_raw_csv(csv_in):
+def load_raw_tsv(tsv_in):
     """
-    Load a .csv of results from the GWAS catalog and format as a pbt.BedTool
+    Load a .tsv of results from the GWAS catalog and format as a pbt.BedTool
     Returns: both the original data frame and the corresponding pbt.BedTool
     """
 
     # Read data
-    df = pd.read_csv(csv_in, sep=',')
-    df.rename(columns={df.columns[0] : 'idx'}, inplace=True)
-    if 'locations' not in df.columns:
-        df['locations'] = df.apply(lambda x: '{}:{}'.format(x.Chr_Id, int(x.Chr_Pos)), axis=1)
+    df = pd.read_csv(tsv_in, sep='\t')
+    df.insert(0, 'idx', df.index.values)
+    df['locations'] = \
+        df.apply(lambda x: ';'.join(['{}:{}'.format(chrom, int(pos)) \
+                                     for chrom, pos \
+                                     in zip(str(x.CHR_ID).split(';'), \
+                                            str(x.CHR_POS).split(';'))]), axis=1)
 
     # Extract coordinates and reformat as a pbt.BedTool with GWAS catalog index as feature name
     def _format_record(data):
         fname = str(data['idx'])
         cstrs = []
-        for csub in data.locations.split(','):
+        for csub in data.locations.split(';'):
             coords = csub.split(':')
             chrom = str(coords[0])
             start = str(coords[1])
@@ -90,18 +94,18 @@ def main():
     parser = argparse.ArgumentParser(
              description=__doc__,
              formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--csv-in', help='input .csv', metavar='csv')
+    parser.add_argument('--tsv-in', help='input .tsv', metavar='tsv')
     parser.add_argument('--tsv-out', help='output .tsv', metavar='tsv')
     parser.add_argument('--gtf', help='GTF for annotating CNVs', required=True)
     args = parser.parse_args()
 
-    # Load input CSV and format as pbt.BedTool
-    gwas_df, gwas_bt = load_raw_csv(args.csv_in)
+    # Load input tsv and format as pbt.BedTool
+    gwas_df, gwas_bt = load_raw_tsv(args.tsv_in)
 
     # Precompute overlap between GWAS catalog coordinates and --gtf
     hits = precompute_hits(gwas_bt, args.gtf)
 
-    # Update input CSV with coding|noncoding distinction
+    # Update input tsv with coding|noncoding distinction
     gwas_df.loc[:, 'gene_context'] = gwas_df.idx.map(hits)
 
     # Write annotated data to --tsv-out
