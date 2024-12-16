@@ -84,13 +84,13 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
         fgrep -v "#" $res_tsv \
         | sed '/^$/d' \
         | awk -v cancer=$cancer -v gc=$germ_context -v sc=$som_context -v OFS="\t" \
-          '{ print cancer, $1, gc, $2, sc, $3 }'
+          '{ print cancer, $1, gc, $2, sc, $3, $4 }'
       done
     done
   done \
   | sort -Vk1,1 -k2,2V -k4,4V -k3,3V -k5,5V \
   | cat \
-    <( echo -e "#cancer\tgermline_gene\tgermline_context\tsomatic_gene\tsomatic_context\tcriteria" ) \
+    <( echo -e "#cancer\tgermline_gene\tgermline_context\tsomatic_gene\tsomatic_context\tcriteria\ttier" ) \
     - \
   > results/VALab_germline_somatic_2024.v2.gene_pairs.annotated.$som_coding_def.tsv
 done
@@ -104,17 +104,17 @@ for germ_context in coding noncoding; do
     awk -v gc=$germ_context -v sc=$som_context \
       '{ if ($3==gc && $5==sc) print }' $res_tsv | wc -l \
     | awk '{ print "Total pairs:", $1, "pairs\n" }'
-    for criteria in same_gene ligand_receptor known_ppi protein_complex; do
-      awk -v gc=$germ_context -v sc=$som_context -v cr=$criteria \
-        '{ if ($3==gc && $5==sc && $6 ~ cr) print }' $res_tsv | wc -l \
-      | awk -v cr=$criteria '{ print "\n*", cr, ":", $1, "pairs" }'
-      if [ $criteria == "same_gene" ]; then
-        awk -v gc=$germ_context -v sc=$som_context -v cr=$criteria -v OFS="\t" \
-          '{ if ($3==gc && $5==sc && $6 ~ cr) print $1, $2 }' $res_tsv \
+    for tier in 1 2 3; do
+      awk -v gc=$germ_context -v sc=$som_context -v tr=$tier \
+        '{ if ($3==gc && $5==sc && $NF<=tr) print }' $res_tsv | wc -l \
+      | awk -v tr=$tier '{ print "\n* Tier", tr, ":", $1, "pairs" }'
+      if [ $tier == 1 ]; then
+        awk -v gc=$germ_context -v sc=$som_context -v tr=$tier -v OFS="\t" \
+          '{ if ($3==gc && $5==sc && $NF<=tr) print $1, $2 }' $res_tsv \
         | sort -Vk1,1 -k2,2V
       else
-        awk -v gc=$germ_context -v sc=$som_context -v cr=$criteria -v OFS="\t" \
-          '{ if ($3==gc && $5==sc && $6 ~ cr) print $1, $2, $4 }' $res_tsv \
+        awk -v gc=$germ_context -v sc=$som_context -v tr=$tier -v OFS="\t" \
+          '{ if ($3==gc && $5==sc && $NF<=tr) print $1, $2, $4 }' $res_tsv \
         | sort -Vk1,1 -k2,2V -k3,3V
       fi
     done
