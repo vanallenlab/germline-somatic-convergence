@@ -33,5 +33,25 @@ loci <- loci[which(!grepl("?", loci$`STRONGEST SNP-RISK ALLELE`, fixed=T)), ]
 # Drop epistatic associations (marked with an "x" in their coordinates)
 loci <- loci[!grepl("x", loci$CHR_POS, fixed=T), ]
 
+# Only keep studies from the last decade
+loci <- loci[which(as.numeric(format(as.Date(loci$DATE), "%Y")) > 2014), ]
+
+# Only keep case:control studies (not case:case)
+loci <- loci[which(grepl("cases", loci$`INITIAL SAMPLE SIZE`) &
+                     grepl("controls", loci$`INITIAL SAMPLE SIZE`)), ]
+
+# Only keep studies with >=10k total cases and >=10k total controls
+loci$case_n <- sapply(loci$`INITIAL SAMPLE SIZE`, function(s){
+  cohort.comp <- unlist(strsplit(s, split=", "))
+  sum(as.numeric(unlist(strsplit(gsub(",", "", cohort.comp[grep("cases", cohort.comp)]),
+                                 split="[ ]+"))), na.rm=T)
+})
+loci$control_n <- sapply(loci$`INITIAL SAMPLE SIZE`, function(s){
+  cohort.comp <- unlist(strsplit(s, split=", "))
+  sum(as.numeric(unlist(strsplit(gsub(",", "", cohort.comp[grep("controls", cohort.comp)]),
+                                 split="[ ]+"))), na.rm=T)
+})
+loci <- loci[which(loci$case_n >= 10000 & loci$control_n >= 10000), ]
+
 # Write filtered loci to output .tsv
 write.table(loci, args[2], sep="\t", quote=F, col.names=T, row.names=F)

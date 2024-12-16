@@ -10,100 +10,138 @@ Parse EBI IntAct database XML to extract lists of known protein-protein interact
 
 import argparse
 import pandas as pd
-import xml.etree.ElementTree as ET
+import xmltodict
 from os.path import basename
 from re import sub
 
-# Declare list of non-specific interaction types to exclude during curation
-nonspec_itypes = ['association', 'colocalization', 'proximity', 
-                  'self interaction', 'putative self interaction']
+# Declare list of less specific interaction types
+direct_nofunc_itypes = ['direct interaction', 'putative self interaction', 'self interaction']
+indirect_itypes = ['physical association', 'association', 'colocalization', 'proximity']
 
 
-def get_ppis(xml_in, return_dataframe=False, eligible_genes=None):
+def get_ppis(xml_in, return_dataframe=False, eligible_genes=None, max_members=10e10):
     """
-    Parse a single XML file and extract all PPIs asserted as "direct interaction"
-    or "physical association"
+    Parse a single XML file and curate all PPIs
 
-    Returns a dict of {interaction_name : set(interactors)}
+    Returns a dict of {interaction_tier : {interaction_name : set(interactors)} }
     Alternatively returns pd.DataFrame if return_dataframe is True
     """
 
-    tree = ET.parse(xml_in)
+    # Instantiate empty dict for holding curated results
+    res = {'direct_functional' : dict(), 'direct_unknown' : dict(), 
+           'indirect' : dict()}
 
-    root = tree.getroot()
-
-    res = {}
+    # Read contents from XML into dict
+    with open(xml_in) as fin:
+        entries = xmltodict.parse(fin.read())['entrySet']['entry']
+        if isinstance(entries, dict):
+            entries = [entries]
 
     # As discovered on December 5, 2024, each .xml can actually contain multiple
     # PPIs. These are stored in the <entry> element in .xml. We need to iterate 
     # over all of them and process each
-    for i in range(len(root)):
-
+    for entry in entries:
+        
         # First, build a dictionary mapping interactorRef codes to gene symbols
         # This is necessary because the actual PPIs held in the interactionList 
         # don't specify gene symbols, just references back to elements in interactorList
-        interactors = {}
-        ilist = [x for x in root[i].findall('./') if x.tag.endswith('interactorList')][0]
+
+        interactors = dict()
+        all_members = entry['interactorList']['interactor']
+        if isinstance(all_members, dict):
+            all_members = [all_members]
+        
+        # Always filter to human proteins only, and only continue if there are 
+        # at least two interactors specified
+        all_members = [m for m in all_members if \
+                       m['organism']['names']['shortLabel'] == 'human' and \
+                       m['interactorType']['names']['shortLabel'] == 'protein']
+        if len(all_members) < 2:
+            continue
 
         # Get gene symbols for all interactors and store in interactors dict
-        for interactor in ilist:
-
-            inumber = interactor.attrib.get('id')
-
+        for member in all_members:
+            inumber = int(member['@id'])
             symbols = set()
+            alias_infos = member['names'].get('alias', [])
+            if isinstance(alias_infos, dict):
+                alias_infos = [alias_infos]
+            for ainfo in alias_infos:
+                gene = ainfo.get('#text')
+                if ' ' in gene or any(c.islower() for c in gene):
+                    continue
+                symbols.add(gene.upper())
 
-            inames = [e for e in interactor.findall('./') if e.tag.endswith('names')][0]
-            for sub_e in inames.iter():
-                if sub_e.tag.endswith('alias'):
-                    if 'gene name' in sub_e.get('type'):
-                        gene = sub_e.text.upper()
-                        if ' ' not in gene:
-                            symbols.add(gene)
+            # If --eligible-genes is optioned, enforce that filter here
+            if eligible_genes is not None:
+                symbols = symbols.intersection(eligible_genes)
 
-            interactors[inumber] = symbols
+            if len(symbols) > 0:
+                interactors[inumber] = symbols
 
         # The interactions themselves are stored in the interactionList element, 
-        # which is a grandchild of the root
-        ilist = [x for x in root[i].findall('./') if x.tag.endswith('interactionList')][0]
-
-        # Each interaction is a single child "interaction" element of interactionList
+        # which is a grandchild of the root. Each interaction is a single child 
+        # "interaction" element of interactionList
+        ilist = entry['interactionList']['interaction']
+        if isinstance(ilist, dict):
+            ilist = [ilist]
         for interaction in ilist:
 
-            # Check criteria for interaction and only keep direct interactions or
-            # physical associations
-            itype = [e for e in interaction.findall('./') if e.tag.endswith('interactionType')][0][0][0].text
-            if itype in nonspec_itypes:
+            # Get interaction name
+            iname = interaction['names']['shortLabel']
+
+            # Assign interaction specificity tier
+            itype = interaction['interactionType']['names']['shortLabel']
+            if itype in indirect_itypes:
+                itier = 'indirect'
+            elif itype in direct_nofunc_itypes:
+                itier = 'direct_unknown'
+            else:
+                itier = 'direct_functional'
+
+            # Get participants, and only retain interaction if >1 participant
+            imembers = set()
+            all_participants = interaction['participantList']['participant']
+            if isinstance(all_participants, dict):
+                all_participants = [all_participants]
+            if len(all_participants) < 2:
                 continue
 
-            # Get interaction name
-            iname = [e for e in interaction.findall('./') if e.tag.endswith('names')][0][0].text
-
-            # Get participants
-            members = set()
-            participant_list = [e for e in interaction.findall('./') if e.tag.endswith('participantList')][0]
-            for participant in participant_list:
-                # Get reference number to interactor
+            for participant in all_participants:
                 try:
-                    inumber = [x for x in participant.findall('./') if x.tag.endswith('interactorRef')][0].text
-                    members.update(interactors[inumber])
+                    inumber = int(participant['interactorRef'])
                 except:
-                    # In at least one case, there was no interactorRef specified
-                    # These situations seem to be pretty rare and should probably be skipped
+                    # In at least one case, there was no interactorRef specified and
+                    # it was not clear why, nor could I find documentation online.
+                    # These situations seem to be pretty rare and should be skipped
                     continue
+                if inumber in interactors.keys():
+                    imembers.update(interactors[inumber])
 
             # Filter members to eligible gene list, if optioned
             if eligible_genes is not None:
-                members = members.intersection(eligible_genes)
+                imembers = imembers.intersection(eligible_genes)
 
             # Update entry in results aggregator
-            if len(members) > 1:
-                res[iname] = members
+            if len(imembers) > 1 and len(imembers) <= max_members:
+                res[itier][iname] = imembers
 
     # Convert res to pd.DataFrame if optioned
     if return_dataframe:
-        for k, v in res.items():
-            res[k] = ';'.join(sorted(list(v)))
-        res = pd.DataFrame.from_dict(res, orient='index').reset_index()
+        subres_dfs = []
+        for itype, subres in res.items():
+            if len(subres) == 0:
+                continue
+            for k, v in subres.items():
+                subres[k] = ';'.join(sorted(list(v)))
+            subres_df = pd.DataFrame.from_dict(subres, orient='index').reset_index()
+            subres_df.columns = 'interaction members'.split()
+            subres_df['type'] = itype
+            subres_dfs.append(subres_df['interaction type members'.split()])
+        if len(subres_dfs) > 0:
+            res = pd.concat(subres_dfs, ignore_index=True)
+        else:
+            res = pd.DataFrame(columns='interaction type members'.split())
 
     return res
 
@@ -115,7 +153,7 @@ def format_output_tsv(res):
 
     # First, collapse all dataframes
     res_df = pd.concat(res, ignore_index=True)
-    res_df.columns = '#interaction members'.split()
+    res_df.columns = '#interaction type members'.split()
 
     # Deduplicate by members
     return res_df.loc[~res_df.members.duplicated(), :].reset_index(drop=True)
@@ -131,6 +169,8 @@ def main():
     parser.add_argument('xml', help='one or more input .xmls', metavar='xml', nargs='+')
     parser.add_argument('-g', '--eligible-genes', help='optional list of ' +
                         'eligible gene symbols to be included')
+    parser.add_argument('-m', '--max-members', default=10e10, type=int,
+                        help='Maximum number of members to allow in a PPI')
     parser.add_argument('--out-tsv', help='output .tsv', metavar='tsv')
     args = parser.parse_args()
 
@@ -147,15 +187,16 @@ def main():
         cpx_id = sub('\.xml$', '', sub('_human', '', basename(xml_in)))
         if cpx_id.endswith('_negative'):
             continue
-        res.append(get_ppis(xml_in, return_dataframe=True, eligible_genes=elig))
+        res.append(get_ppis(xml_in, return_dataframe=True, eligible_genes=elig, 
+                            max_members=args.max_members))
 
     # Exclude any interactions listed in the "negative" XML files
     # Per EBI documentation, these are interactions that have been refuted by
     # published evidence, and it sounds like they set a pretty high bar for this
     # TODO: need to implement this in the future
 
-    # Format output as a two-column pd.DataFrame of interaction id & gene symbols
-    # Before writing to --out-tsv
+    # Format output as a three-column pd.DataFrame of interaction id, tier, 
+    # and member gene symbols before writing to --out-tsv
     res_df = format_output_tsv(res)
     res_df.to_csv(args.out_tsv, sep='\t', index=False, na_rep='NA')
 

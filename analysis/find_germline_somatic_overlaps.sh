@@ -1,4 +1,4 @@
-# Germline:Somatic Exploratory Pilot Analysis 2023
+# Germline:Somatic Convergence Project
 # Copyright (c) 2023 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
@@ -120,4 +120,49 @@ for germ_context in coding noncoding; do
     done
   done
 done
+
+
+# TODO: finish this
+
+# # Run find_pairs.py for all combination of cancers and negative control phenotypes
+# for cancer in breast colorectal lung prostate renal; do
+#   for nc_pheno in atrial_fibrilation inguinal_hernia myocardial_infarction; do
+#     for germ_context in coding noncoding; do
+#       for som_context in coding noncoding; do
+#         $CODEDIR/analysis/find_pairs.py \
+#           --germline gene_lists/germline_$germ_context/$nc_pheno.germline.$germ_context.genes.list \
+#           --somatic gene_lists/somatic_$som_context/$cancer.somatic.$som_context.genes.list \
+#           --cellchat-db other_data/cellchat_db_formatted.csv \
+#           --ppi-db other_data/ebi_intact.all_interactions.tsv \
+#           --protein-complexes other_data/ebi_complex_portal.all_complexes.tsv \
+#           --out-tsv results/find_pairs/${cancer}_${nc_pheno}.germline_$germ_context.somatic_$som_context.pairs.tsv
+#       done
+#     done
+#   done
+# done
+
+
+# # Concatenate all results into a single table
+# for som_coding_def in union intersection cosmic_only intogen_only; do
+#   for cancer in breast colorectal lung prostate renal; do
+#     for germ_context in coding noncoding; do
+#       for som_context in coding noncoding; do
+#         if [ $som_context != "coding" ]; then
+#           res_tsv=results/find_pairs/$cancer.germline_$germ_context.somatic_$som_context.pairs.tsv
+#         else
+#           res_tsv=results/find_pairs/$cancer.germline_$germ_context.somatic_$som_context.$som_coding_def.pairs.tsv
+#         fi
+#         fgrep -v "#" $res_tsv \
+#         | sed '/^$/d' \
+#         | awk -v cancer=$cancer -v gc=$germ_context -v sc=$som_context -v OFS="\t" \
+#           '{ print cancer, $1, gc, $2, sc, $3 }'
+#       done
+#     done
+#   done \
+#   | sort -Vk1,1 -k2,2V -k4,4V -k3,3V -k5,5V \
+#   | cat \
+#     <( echo -e "#cancer\tgermline_gene\tgermline_context\tsomatic_gene\tsomatic_context\tcriteria" ) \
+#     - \
+#   > results/VALab_germline_somatic_2024.v2.gene_pairs.annotated.$som_coding_def.tsv
+# done
 

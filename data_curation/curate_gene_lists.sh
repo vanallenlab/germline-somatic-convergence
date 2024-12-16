@@ -1,4 +1,4 @@
-# Germline:Somatic Exploratory Pilot Analysis 2023
+# Germline:Somatic Convergence Project
 # Copyright (c) 2024 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
@@ -42,10 +42,28 @@ for dir in \
   if ! [ -e $dir ]; then mkdir $dir; fi
 done
 for cancer in breast colorectal lung prostate renal; do
-  fgrep -wf \
+  fgrep -xf \
     other_data/cosmic_genes/somatic_coding/$cancer.somatic.coding.genes.list \
     other_data/intogen_genes/somatic_coding/$cancer.somatic.coding.genes.list \
   > other_data/cosmic_intogen_intersection/somatic_coding/$cancer.somatic.coding.genes.list
+done
+
+
+# Generate table of counts of somatic genes comparing COSMIC and intOGen
+for cancer in breast colorectal lung prostate renal; do
+  cosgl=other_data/cosmic_genes/somatic_coding/$cancer.somatic.coding.genes.list
+  intgl=other_data/intogen_genes/somatic_coding/$cancer.somatic.coding.genes.list
+  for wrapper in 1; do
+    echo $cancer
+    cat $cosgl | wc -l
+    cat $intgl | wc -l
+    both=$( fgrep -xf $cosgl $intgl | wc -l )
+    echo $both
+    fgrep -wvf $intgl $cosgl | wc -l
+    fgrep -wvf $cosgl $intgl | wc -l
+    either=$( cat $cosgl $intgl | sort -V | uniq | wc -l )
+    echo "" | awk -v both=$both -v either=$either '{ print both / either }'
+  done | paste -s
 done
 
 
@@ -59,6 +77,7 @@ done
 
 # Annotate GWAS catalog for gene overlap
 for cancer in breast colorectal lung prostate renal; do
+  echo $cancer
   $CODEDIR/data_curation/annotate_gwas_catalog.py \
     --tsv-in other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.tsv \
     --gtf ~/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/gencode.v47.annotation.gtf.gz \
@@ -100,8 +119,8 @@ bedtools intersect -wa -u \
 for cancer in breast colorectal lung prostate renal; do
   for context in somatic germline; do
     for csq in coding noncoding; do
-      fgrep -wf \
-        other_data/gencode.v44.autosomal.protein_coding.genes.list \
+      fgrep -xf \
+        other_data/gencode.v47.autosomal.protein_coding.genes.list \
         gene_lists/${context}_${csq}/$cancer.$context.$csq.genes.list \
       > gene_lists/${context}_${csq}/$cancer.$context.$csq.genes.list2
       mv \

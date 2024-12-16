@@ -1,4 +1,4 @@
-# Germline:Somatic Exploratory Pilot Analysis 2023
+# Germline:Somatic Convergence Project
 # Copyright (c) 2023 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
@@ -160,10 +160,11 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
     | paste <( echo -e "$cancer\tgermline\tcoding_cosmic" ) -
 
     # Other germline coding contributed by GWAS (after excluding COSMIC)
-    idx=$( head -n1 gene_lists/germline_non_organized/${cancer}_gwas_catalog_sig_filtered.annotated.tsv \
-           | sed 's/\t/\n/g' | awk '{ if ($1=="mappedGenes") print NR }' )
+    idx=$( head -n1 other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
+           | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
     awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
-      gene_lists/germline_non_organized/${cancer}_gwas_catalog_sig_filtered.annotated.tsv \
+      other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
+    | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
     | fgrep -xvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
     | wc -l | paste <( echo -e "$cancer\tgermline\tcoding_gwas" ) -
 
@@ -217,10 +218,11 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
       | paste <( echo -e "$cancer\t$q\tgermline\tcoding_cosmic" ) -
 
       # Other germline coding contributed by GWAS (after excluding COSMIC)
-      idx=$( head -n1 gene_lists/germline_non_organized/${cancer}_gwas_catalog_sig_filtered.annotated.tsv \
-             | sed 's/\t/\n/g' | awk '{ if ($1=="mappedGenes") print NR }' )
+      idx=$( head -n1 other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
+             | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
       awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
-        gene_lists/germline_non_organized/${cancer}_gwas_catalog_sig_filtered.annotated.tsv \
+        other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
+      | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
       | fgrep -xvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
       | fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
       | wc -l | paste <( echo -e "$cancer\t$q\tgermline\tcoding_gwas" ) -

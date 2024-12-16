@@ -10,7 +10,7 @@ Parse EBI Complex Portal XML to extract lists of genes involved in the same comp
 
 import argparse
 import pandas as pd
-import xml.etree.ElementTree as ET
+import xmltodict
 from os.path import basename
 from re import sub
 
@@ -20,9 +20,15 @@ def get_complex_members(xml_in):
     Parse a single XML file and extract all human gene symbols
     """
 
-    tree = ET.parse(xml_in)
+    # Read contents from XML into dict
+    with open(xml_in) as fin:
+        tree = xmltodict.parse(fin.read())['entrySet']['entry']
 
-    root = tree.getroot()
+    import pdb; pdb.set_trace()
+
+    # tree = ET.parse(xml_in)
+
+    # root = tree.getroot()
 
     members = set()
 
@@ -77,8 +83,17 @@ def main():
              description=__doc__,
              formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('xml', help='one or more input .xmls', metavar='xml', nargs='+')
+    parser.add_argument('-g', '--eligible-genes', help='optional list of ' +
+                        'eligible gene symbols to be included')
     parser.add_argument('--out-tsv', help='output .tsv', metavar='tsv')
     args = parser.parse_args()
+
+    # Load list of eligible genes, if optioned
+    if args.eligible_genes is not None:
+        with open(args.eligible_genes) as fin:
+            elig = set([g.rstrip() for g in fin.readlines()])
+    else:
+        elig = None
 
     # One row per complex
     res = {}
