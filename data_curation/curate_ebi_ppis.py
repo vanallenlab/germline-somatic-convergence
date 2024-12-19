@@ -16,7 +16,8 @@ from re import sub
 
 # Declare list of less specific interaction types
 direct_nofunc_itypes = ['direct interaction', 'putative self interaction', 'self interaction']
-indirect_itypes = ['physical association', 'association', 'colocalization', 'proximity']
+indirect_itypes = ['physical association']
+drop_itypes = ['colocalization', 'proximity', 'association']
 
 
 def get_ppis(xml_in, return_dataframe=False, eligible_genes=None, max_members=10e10):
@@ -91,8 +92,11 @@ def get_ppis(xml_in, return_dataframe=False, eligible_genes=None, max_members=10
             iname = interaction['names']['shortLabel']
 
             # Assign interaction specificity tier
+            # Never keep cellular colocalization or proximity, as they are too coarse
             itype = interaction['interactionType']['names']['shortLabel']
-            if itype in indirect_itypes:
+            if itype in drop_itypes:
+                continue
+            elif itype in indirect_itypes:
                 itier = 'indirect'
             elif itype in direct_nofunc_itypes:
                 itier = 'direct_unknown'
@@ -193,7 +197,7 @@ def main():
     # Exclude any interactions listed in the "negative" XML files
     # Per EBI documentation, these are interactions that have been refuted by
     # published evidence, and it sounds like they set a pretty high bar for this
-    # TODO: need to implement this in the future
+    # TODO: could implement this in the future
 
     # Format output as a three-column pd.DataFrame of interaction id, tier, 
     # and member gene symbols before writing to --out-tsv

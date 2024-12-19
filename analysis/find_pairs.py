@@ -127,6 +127,8 @@ def format_output(identical_pairs, lr_pairs, ppi_pairs, complex_pairs, outfile,
 
     # Format results as dataframe
     res_df = pd.DataFrame.from_dict(res, orient='index').reset_index(drop=True)
+    if len(res_df) < 1:
+        res_df = pd.DataFrame(columns='germline_gene somatic_gene criteria tier'.split())
     res_df.sort_values(by='tier germline_gene somatic_gene'.split(), axis=0, inplace=True)
     
     # Write dataframe to outfile

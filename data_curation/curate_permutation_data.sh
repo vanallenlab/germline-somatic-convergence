@@ -146,15 +146,25 @@ $CODEDIR/data_curation/curate_gtex_expression.R
 ###################################################
 # 7. Count of genes to be sampled for each strata #
 ###################################################
-# Re-curate COSMIC-only gene lists to identify how many *new* genes are implicated
-# by coding GWAS hits
+# Re-curate COSMIC-only and GeneBass-only gene lists to identify how many *new* 
+# germline genes are implicated by coding GWAS hits
 mkdir $WRKDIR/cosmic_tmp/
 $CODEDIR/data_curation/curate_cosmic_genes.R $WRKDIR/cosmic_tmp/
+mkdir $WRKDIR/genebass_tmp
+mkdir $WRKDIR/genebass_tmp/germline_coding
+for pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+  $CODEDIR/data_curation/filter_genebass.R \
+    other_data/genebass/$pheno.lof.genebass.csv \
+    other_data/genebass/$pheno.mislc.genebass.csv \
+    $WRKDIR/genebass_tmp/germline_coding/$pheno.germline.coding.genes.list
+done
 
 # One set of counts for each definition of somatic coding variants
 for som_coding_def in union intersection cosmic_only intogen_only; do
+
   # Loop over all strata and count genes
   for cancer in breast colorectal lung prostate renal; do
+
     # COSMIC germline coding
     cat $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list | wc -l \
     | paste <( echo -e "$cancer\tgermline\tcoding_cosmic" ) -
@@ -168,10 +178,35 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
     | fgrep -xvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
     | wc -l | paste <( echo -e "$cancer\tgermline\tcoding_gwas" ) -
 
+    # Add germline coding data for negative control phenotypes
+    for nc_pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+      # GeneBass coding
+      cat $WRKDIR/genebass_tmp/germline_coding/$nc_pheno.germline.coding.genes.list | wc -l \
+      | paste <( echo -e "${cancer}_${nc_pheno}\tgermline\tcoding_cosmic" ) -
+
+      # Other germline coding contributed by GWAS (after excluding GeneBass)
+      idx=$( head -n1 other_data/gwas_catalog/$nc_pheno.gwas_catalog.12_11_24.filtered.annotated.tsv \
+             | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
+      awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
+        other_data/gwas_catalog/$nc_pheno.gwas_catalog.12_11_24.filtered.annotated.tsv \
+      | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
+      | fgrep -xvf $WRKDIR/genebass_tmp/germline_coding/$nc_pheno.germline.coding.genes.list \
+      | wc -l | paste <( echo -e "${cancer}_${nc_pheno}\tgermline\tcoding_gwas" ) -
+    done
+
     # Germline & somatic noncoding
     for origin in germline somatic; do
       cat gene_lists/${origin}_noncoding/$cancer.$origin.noncoding.genes.list | wc -l \
       | paste <( echo -e "$cancer\t$origin\tnoncoding" ) -
+      for nc_pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+        if [ $origin == "germline" ]; then
+          cat gene_lists/${origin}_noncoding/$nc_pheno.$origin.noncoding.genes.list | wc -l \
+          | paste <( echo -e "${cancer}_${nc_pheno}\t$origin\tnoncoding" ) -
+        else
+          cat gene_lists/${origin}_noncoding/$cancer.$origin.noncoding.genes.list | wc -l \
+          | paste <( echo -e "${cancer}_${nc_pheno}\t$origin\tnoncoding" ) -
+        fi
+      done
     done
 
     # Somatic coding depends on definition being used
@@ -190,8 +225,14 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
         ;;
     esac
     cat $som_coding_genes | wc -l | paste <( echo -e "$cancer\tsomatic\tcoding" ) -
+    for nc_pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+      cat $som_coding_genes | wc -l | paste <( echo -e "${cancer}_${nc_pheno}\tsomatic\tcoding" ) -
+    done
+
   done > other_data/permutation_gene_counts.$som_coding_def.tsv
+
 done
+
 
 
 ###################################################################
@@ -216,6 +257,11 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
       fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
         $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list | wc -l \
       | paste <( echo -e "$cancer\t$q\tgermline\tcoding_cosmic" ) -
+      for nc_pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+        fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
+          $WRKDIR/genebass_tmp/germline_coding/$nc_pheno.germline.coding.genes.list | wc -l \
+        | paste <( echo -e "${cancer}_${nc_pheno}\t$q\tgermline\tcoding_cosmic" ) -
+      done
 
       # Other germline coding contributed by GWAS (after excluding COSMIC)
       idx=$( head -n1 other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
@@ -226,12 +272,33 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
       | fgrep -xvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
       | fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
       | wc -l | paste <( echo -e "$cancer\t$q\tgermline\tcoding_gwas" ) -
+      for nc_pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+        idx=$( head -n1 other_data/gwas_catalog/$nc_pheno.gwas_catalog.12_11_24.filtered.annotated.tsv \
+               | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
+        awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
+          other_data/gwas_catalog/$nc_pheno.gwas_catalog.12_11_24.filtered.annotated.tsv \
+        | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
+        | fgrep -xvf $WRKDIR/genebass_tmp/germline_coding/$nc_pheno.germline.coding.genes.list \
+        | fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
+        | wc -l | paste <( echo -e "${cancer}_${nc_pheno}\t$q\tgermline\tcoding_gwas" ) -
+      done
 
       # Germline & somatic noncoding
       for origin in germline somatic; do
         fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
           gene_lists/${origin}_noncoding/$cancer.$origin.noncoding.genes.list | wc -l \
         | paste <( echo -e "$cancer\t$q\t$origin\tnoncoding" ) -
+        for nc_pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+          if [ $origin == "germline" ]; then
+            fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
+              gene_lists/${origin}_noncoding/$nc_pheno.$origin.noncoding.genes.list | wc -l \
+            | paste <( echo -e "${cancer}_${nc_pheno}\t$q\t$origin\tnoncoding" ) -
+          else
+            fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
+              gene_lists/${origin}_noncoding/$cancer.$origin.noncoding.genes.list | wc -l \
+            | paste <( echo -e "${cancer}_${nc_pheno}\t$q\t$origin\tnoncoding" ) -
+          fi
+        done
       done
 
       # Somatic coding depends on definition being used
@@ -252,6 +319,11 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
       fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
         $som_coding_genes | wc -l \
       | paste <( echo -e "$cancer\t$q\tsomatic\tcoding" ) -
+      for nc_pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+        fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
+          $som_coding_genes | wc -l \
+        | paste <( echo -e "${cancer}_${nc_pheno}\t$q\tsomatic\tcoding" ) -
+      done
     done
   done > other_data/gene_counts_per_expression_quantile.$som_coding_def.tsv
 done
