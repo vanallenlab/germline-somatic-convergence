@@ -15,12 +15,14 @@ args <- commandArgs(trailingOnly=TRUE)
 observed.in <- as.character(args[1])
 permuted.in <- as.character(args[2])
 out.prefix <- as.character(args[3])
-strata.labels <- c("any" = "Any Convergence Criterion",
-                   "same" = "Identical Genes",
-                   "ligand" = "Ligand/Receptor Pairs",
-                   "known" = "Protein-Protein Interactions",
-                   "protein" = "Same Protein Complex")
-cancer.colors <- c("all" = "#404040",
+strata.labels <- c("tier1" = "Tier 1 (same gene)",
+                   "tier2" = "Tier 2 (PPI known func.)",
+                   "tier2plus" = "Tiers 1 & 2",
+                   "tier3" = "Tier 3 (PPI unknown func.)",
+                   "tier3plus" = "Tiers 1, 2, and 3",
+                   "tier4" = "Tier 4 (same complex)",
+                   "any" = "Any convergence criterion")
+cancer.colors <- c("any" = "black",
                    "breast" = "#FF7A7A",
                    "colorectal" = "#BA71D6",
                    "lung" = "#FF7C1F",
@@ -29,34 +31,94 @@ cancer.colors <- c("all" = "#404040",
 
 # # DEV:
 # observed.in <- "~/scratch/test.observed_counts.tsv"
-# permuted.in <- "~/scratch/germ_som_convergence.permutation_results.uniform_weighting.n100.txt.gz"
+# permuted.in <- "~/scratch/perm_test.results.tsv"
 # out.prefix <- "~/scratch/convergence_test"
 
 # Make vector for expected column names
-cancers <- c("breast", "colorectal", "lung", "prostate", "renal")
-criteria <- c("any", "same_gene", "ligand_receptor", "known_ppi", "protein_complex")
+tiers <- paste("tier", 1:4, sep="")
 origins <- c("germline", "somatic")
 contexts <- c("coding", "noncoding")
-strata.names <- c(
-  paste("germline_any.somatic_any", criteria, sep="."),
-  as.vector(unlist(sapply(contexts, function(germline_context){
-    sapply(contexts, function(somatic_context){
-      paste("germline_", germline_context, ".somatic_", somatic_context, ".",
-            criteria, sep="")
-    })
+strata.names <- as.vector(unlist(sapply(contexts, function(germline_context){
+  sapply(contexts, function(somatic_context){
+    paste("germline_", germline_context, ".somatic_", somatic_context, ".",
+          tiers, sep="")
+  })
+})))
+
+# Helper function for filling in missing summary data from count dataframes
+fill.summary.data <- function(df){
+  # Make summary columns for all contexts
+  for(tier in tiers){
+    ac <- apply(df[, grep(tier, colnames(df))], 1, sum, na.rm=T)
+    df[, paste("germline_any.somatic_any", tier, sep=".")] <- ac
+  }
+
+  # Make summary columns for multi-tier criteria
+  strata.bases <- gsub(".tier1", "", colnames(df)[grep("tier1", colnames(df))])
+  t2p <- df[, grep("tier1", colnames(df))] + df[, grep("tier2", colnames(df))]
+  df[, paste(strata.bases, "tier2plus", sep=".")] <- t2p
+  t3p <- df[, grep("tier2plus", colnames(df))] + df[, grep("tier3", colnames(df))]
+  df[, paste(strata.bases, "tier3plus", sep=".")] <- t3p
+  t4p <- df[, grep("tier3plus", colnames(df))] + df[, grep("tier4", colnames(df))]
+  df[, paste(strata.bases, "any", sep=".")] <- t4p
+
+  # Make summary rows for pooled result across all cancers
+  # and, separately, each negative control phenotype
+  prim.cancers <- sort(unique(df$cancer[grep("_", df$cancer, invert=T)]))
+  nc.phenos <- sort(unique(sapply(setdiff(df$cancer, prim.cancers), function(ps){
+    paste(unlist(strsplit(ps, split="_"))[-1], collapse="_")
   })))
-)
+  if(any(grepl("perm_idx", colnames(df)))){
+    perm.infos <- unique(df[, grep("perm_idx", colnames(df))])
+    for(info.ridx in 1:nrow(perm.infos)){
+      major.idx <- perm.infos[info.ridx, 1]
+      minor.idx <- perm.infos[info.ridx, 2]
+      sub.df <- df[which(df$perm_idx.major == major.idx
+                         & df$perm_idx.minor == minor.idx), ]
+      ac <- as.numeric(apply(sub.df[which(sub.df$cancer %in% prim.cancers), -(1:3)],
+                             2, sum, na.rm=T))
+      append.df <- as.data.frame(t(data.frame(c("any", major.idx, minor.idx, ac))))
+      colnames(append.df) <- colnames(sub.df)
+      for(pheno in nc.phenos){
+        ac <- as.numeric(apply(sub.df[grep(pheno, sub.df$cancer), -(1:3)],
+                               2, function(v){sum(as.numeric(v), na.rm=T)}))
+        append.df <- as.data.frame(rbind(append.df, c(paste("any", pheno, sep="_"),
+                                                major.idx, minor.idx, ac)))
+      }
+      rownames(append.df) <- NULL
+      df <- as.data.frame(rbind(df, append.df))
+      df[, -c(1:3)] <- apply(df[, -c(1:3)], 2, as.numeric)
+    }
+  }else{
+    ac <- as.numeric(apply(df[which(df$cancer %in% prim.cancers), -1],
+                           2, sum, na.rm=T))
+    df <- as.data.frame(rbind(df, c("any", ac)))
+    for(pheno in nc.phenos){
+      ac <- as.numeric(apply(df[grep(pheno, df$cancer), -1], 2,
+                             function(v){sum(as.numeric(v), na.rm=T)}))
+      df <- as.data.frame(rbind(df, c(paste("any", pheno, sep="_"), ac)))
+    }
+    df[, -1] <- apply(df[, -1], 2, as.numeric)
+  }
+
+  return(df)
+}
 
 # Load observed data as data.frame
 obs.df <- read.table(observed.in, sep="\t", header=F, col.names=c("cancer", strata.names))
+obs.df <- fill.summary.data(obs.df)
+cancers <- sort(unique(obs.df$cancer))
 
 # Load permuted data as data.frame
 perm.df <- read.table(permuted.in, sep="\t", header=F,
-                      col.names=c("cancer", "perm_idx.major", "perm_idx.minor", strata.names))
+                      col.names=c("cancer", "perm_idx.major", "perm_idx.minor",
+                                  strata.names))
+perm.df <- fill.summary.data(perm.df)
+all.strata.names <- colnames(obs.df)[-1]
 
 # Run one comparison for each cancer type and strata
-res <- do.call("rbind", lapply(c("all", cancers), function(cancer){
-  as.data.frame(do.call("rbind", lapply(strata.names, function(strata){
+res <- do.call("rbind", lapply(cancers, function(cancer){
+  as.data.frame(do.call("rbind", lapply(all.strata.names, function(strata){
     # Permutation test
     obs.val <- as.numeric(obs.df[which(obs.df$cancer == cancer), strata])
     perm.vals <- as.numeric(perm.df[which(perm.df$cancer == cancer), strata])
@@ -64,14 +126,19 @@ res <- do.call("rbind", lapply(c("all", cancers), function(cancer){
     exp.se <- sd(perm.vals, na.rm=T) / sqrt(length(perm.vals))
     exp.ci <- quantile(perm.vals, c(0.025, 0.975))
     fold <- obs.val / exp.mean
-    fold.ci <- sort(obs.val / (exp.mean + (qnorm(c(0.025, 0.975)) * exp.se)))
-    fold.ci[1] <- max(c(0, fold.ci[1]))
+    if(all(exp.ci == 0)){
+      fold.ci <- c(0, Inf)
+    }else if(min(exp.ci) <= 0){
+      fold.ci <- c(0, obs.val / max(exp.ci))
+    }else{
+      fold.ci <- sort(obs.val / exp.ci)
+    }
     perms.gt <- length(which(perm.vals >= obs.val))
     n.perms <- length(perm.vals)
     p <- (perms.gt + 1) / (n.perms + 1)
 
     # Plot obs/exp histogram
-    highlight.color <- cancer.colors[cancer]
+    highlight.color <- if(cancer %in% names(cancer.colors)){cancer.colors[cancer]}else{"gray40"}
     pdf(paste(out.prefix, cancer, strata, "pdf", sep="."),
         height=3.5, width=3.5)
     RLCtools::density.w.outliers(perm.vals, style="hist", min.bin.width=1,
@@ -90,8 +157,13 @@ res <- do.call("rbind", lapply(c("all", cancers), function(cancer){
          col=highlight.color, cex=5/6, xpd=T)
     strata.parts <- lapply(unlist(strsplit(strata, split=".", fixed=T)),
                            function(s){unlist(strsplit(s, split="_"))})
-    l6 <- paste(cancer, "Cancer")
-    mtext(3, line=6, text=title.case(l6, case="sentence"), font=2)
+    if(grepl("_", cancer)){
+      cparts <- unlist(strsplit(cancer, split="_"))
+      l6 <- paste(cparts[1], "cancer vs.", paste(cparts[-1], collapse=" "))
+    }else{
+      l6 <- paste(cancer, "Cancer")
+    }
+    mtext(3, line=6, text=title.case(l6, case="sentence"))
     l5 <- sub("any", "all", paste(c(strata.parts[[1]][2:1], "Variants"), collapse=" "))
     mtext(3, line=5, text=title.case(l5, case="sentence"))
     l4 <- sub("any", "all", paste(c(strata.parts[[2]][2:1], "Variants"), collapse=" "))
@@ -117,11 +189,12 @@ res <- do.call("rbind", lapply(c("all", cancers), function(cancer){
     dev.off()
 
     # Return permutation res
+    if(is.nan(fold)){fold <- 1}
     c(cancer,
       paste(setdiff(strata.parts[[1]], "germline"), sep="_"),
       paste(setdiff(strata.parts[[2]], "somatic"), sep="_"),
       paste(strata.parts[[3]], collapse="_"),
-      obs.val, exp.mean, exp.ci, fold, fold.ci, p)
+      obs.val, exp.mean, as.numeric(exp.ci), fold, as.numeric(fold.ci), p)
   })))
 }))
 colnames(res) <- c("cancer", "germline", "somatic", "criteria", "observed",

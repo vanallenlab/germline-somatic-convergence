@@ -8,7 +8,7 @@
 version 1.0
 
 
-import "https://raw.githubusercontent.com/vanallenlab/germline-somatic-exploration-2023/main/permutation/scatter_permutation_single_strata.wdl" as Permute
+import "https://raw.githubusercontent.com/vanallenlab/germline-somatic-exploration-2023/rlc-dec24-updates/permutation/scatter_permutation_single_strata.wdl" as Permute
 
 
 workflow ScatterPermutations {
@@ -29,7 +29,7 @@ workflow ScatterPermutations {
     File expression_quantiles
 
     # Reference files for assessing overlap
-    File cellchat_tsv
+    File cellchat_csv
     File ppi_tsv
     File complexes_tsv
 
@@ -70,7 +70,7 @@ workflow ScatterPermutations {
       eligible_gene_symbols = eligible_gene_symbols,
       expression_quantiles = expression_quantiles,
       expression_quantile_gene_counts_tsv = expression_quantile_gene_counts_tsvs[i],
-      cellchat_tsv = cellchat_tsv,
+      cellchat_csv = cellchat_csv,
       ppi_tsv = ppi_tsv,
       complexes_tsv = complexes_tsv,
       shuffle_script = shuffle_script,

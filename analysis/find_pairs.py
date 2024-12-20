@@ -133,9 +133,10 @@ def format_output(identical_pairs, lr_pairs, ppi_pairs, complex_pairs, outfile,
     
     # Write dataframe to outfile
     if report_counts:
-        counts_df = pd.DataFrame([len(res_df), len(identical_pairs), 
-                                  len(lr_pairs), len(ppi_pairs), 
-                                  len(complex_pairs)]).T
+        counts_df = pd.DataFrame([(res_df.tier == 1).sum(), 
+                                  (res_df.tier == 2).sum(), 
+                                  (res_df.tier == 3).sum(),
+                                  (res_df.tier == 4).sum()]).T
         counts_df.to_csv(outfile, sep='\t', index=False, header=False, na_rep='NA')
     else:
         if len(res_df) > 0:

@@ -30,7 +30,7 @@ workflow RunPermutations {
 
 
     # Reference files for assessing overlap
-    File cellchat_tsv
+    File cellchat_csv
     File ppi_tsv
     File complexes_tsv
 
@@ -68,7 +68,7 @@ workflow RunPermutations {
         noncoding_gwas_weights = uniform_weights,
         somatic_noncoding_weights = uniform_weights,
         eligible_gene_symbols = eligible_gene_symbols,
-        cellchat_tsv = cellchat_tsv,
+        cellchat_csv = cellchat_csv,
         ppi_tsv = ppi_tsv,
         complexes_tsv = complexes_tsv,
         shuffle_script = shuffle_script,
@@ -90,7 +90,7 @@ workflow RunPermutations {
         noncoding_gwas_weights = noncoding_gwas_weights,
         somatic_noncoding_weights = somatic_noncoding_weights,
         eligible_gene_symbols = eligible_gene_symbols,
-        cellchat_tsv = cellchat_tsv,
+        cellchat_csv = cellchat_csv,
         ppi_tsv = ppi_tsv,
         complexes_tsv = complexes_tsv,
         shuffle_script = shuffle_script,
@@ -114,7 +114,7 @@ workflow RunPermutations {
         eligible_gene_symbols = eligible_gene_symbols,
         expression_quantiles = expression_quantiles,
         expression_quantile_gene_counts_tsv = expression_quantile_gene_counts_tsv,
-        cellchat_tsv = cellchat_tsv,
+        cellchat_csv = cellchat_csv,
         ppi_tsv = ppi_tsv,
         complexes_tsv = complexes_tsv,
         shuffle_script = shuffle_script,
@@ -138,7 +138,7 @@ workflow RunPermutations {
         eligible_gene_symbols = eligible_gene_symbols,
         expression_quantiles = expression_quantiles,
         expression_quantile_gene_counts_tsv = expression_quantile_gene_counts_tsv,
-        cellchat_tsv = cellchat_tsv,
+        cellchat_csv = cellchat_csv,
         ppi_tsv = ppi_tsv,
         complexes_tsv = complexes_tsv,
         shuffle_script = shuffle_script,
@@ -269,7 +269,7 @@ task PermuteOverlaps {
     File? expression_quantiles
     File? expression_quantile_gene_counts_tsv
 
-    File cellchat_tsv
+    File cellchat_csv
     File ppi_tsv
     File complexes_tsv
 
@@ -296,6 +296,7 @@ task PermuteOverlaps {
     # Run multiple permutations in each task
     for i in $( seq 1 ~{n_perm_per_shard} ); do
 
+      date
       echo -e "Starting permutation $i of ~{n_perm_per_shard}..."
 
       # Reset directory tree for each permutation
@@ -351,8 +352,15 @@ task PermuteOverlaps {
         # Set seed string
         # Note: we take the first and last characters of each cancer, origin, 
         # and context because of total seed string length limits in our R script
+        # The only exception is for negative control phenotypes, where we take 
+        # the first letter of the cancer and of the non-cancer phenotype to avoid
+        # a collision between mycardial_infarction and atrial_fibrilation
         sp1="~{shard_number}"
-        sp2="$( echo $cancer | cut -c1 )${cancer: -1}"
+        if [ $( echo $cancer | fgrep "_" | wc -l ) -gt 0 ]; then
+          sp2="$( echo $cancer | sed 's/_/\n/g' | cut -c1 | sed -n '1,2p' | paste -s -d "" )"
+        else
+          sp2="$( echo $cancer | cut -c1 )${cancer: -1}"
+        fi
         sp3="$( echo $origin | cut -c1 )${origin: -1}"
         sp4="$( echo $context | cut -c1 )${context: -1}"
         sp5="$i"
@@ -418,7 +426,7 @@ task PermuteOverlaps {
             python ~{find_pairs_script} \
               --germline gene_lists/germline_$germ_context/$cancer.germline.$germ_context.genes.list \
               --somatic gene_lists/somatic_$som_context/$cancer.somatic.$som_context.genes.list \
-              --cellchat-db ~{cellchat_tsv} \
+              --cellchat-db ~{cellchat_csv} \
               --ppi-db ~{ppi_tsv} \
               --protein-complexes ~{complexes_tsv} \
               --report-counts
@@ -426,18 +434,10 @@ task PermuteOverlaps {
         done \
         | paste -s \
         | awk -v OFS="\t" -v cancer=$cancer -v major_idx=~{shard_number} -v minor_idx=$i \
-          '{ print cancer, major_idx, minor_idx, 
-                   $1+$6+$11+$16, $2+$7+$12+$17, $3+$8+$13+$18, \
-                   $4+$9+$14+$19, $5+$10+$15+$20, $0 }' \
+          '{ print cancer, major_idx, minor_idx, $0 }' \
         >> permutation_results.tmp.tsv
 
       done < cancers.list
-
-      # Add row for pan-cancer analysis (column-wise sum of all cancers)
-      cut -f4- permutation_results.tmp.tsv \
-      | awk -v OFS="\t" -v cancer="all" -v major_idx=~{shard_number} -v minor_idx=$i \
-        '{ for (i=1; i<=NF; i++) $i=(a[i]+=$i) }END{ print cancer, major_idx, minor_idx, $0 }' \
-      >> permutation_results.tmp.tsv
 
       # Update final output file with results from this permutation
       cat permutation_results.tmp.tsv >> ~{outfile_name}
@@ -489,26 +489,13 @@ task ComparePermutedAndEmpirical {
       for wrapper in 1; do
         echo $cancer
 
-        # Get count of convergent gene pairs irrespective of germline|somatic context
-        awk -v FS="\t" -v cancer="$cancer" \
-          '{ if ($1==cancer) print }' \
-          ~{observed_overlaps_tsv} | wc -l
-        for criteria in same_gene ligand_receptor known_ppi protein_complex; do
-          awk -v FS="\t" -v cancer="$cancer" -v criteria=$criteria \
-            '{ if ($1==cancer && $NF ~ criteria) print }' \
-            ~{observed_overlaps_tsv} | wc -l
-        done
-
         # Enumerate results by germline & somatic contexts
         for germ_context in coding noncoding; do
           for som_context in coding noncoding; do
-            awk -v FS="\t" -v cancer="$cancer" -v gc=$germ_context -v sc=$som_context \
-              '{ if ($1==cancer && $3==gc && $5==sc) print }' \
-              ~{observed_overlaps_tsv} | wc -l
-            for criteria in same_gene ligand_receptor known_ppi protein_complex; do
+            for tier in $( seq 1 4 ); do
               awk -v FS="\t" -v cancer="$cancer" -v gc=$germ_context \
-                -v sc=$som_context -v criteria=$criteria \
-                '{ if ($1==cancer && $3==gc && $5==sc && $NF ~ criteria) print }' \
+                -v sc=$som_context -v tier=$tier \
+                '{ if ($1==cancer && $3==gc && $5==sc && $NF==tier) print }' \
                 ~{observed_overlaps_tsv} | wc -l
             done
           done
@@ -518,12 +505,6 @@ task ComparePermutedAndEmpirical {
 
     done < ~{write_lines(cancers)} \
     > "~{output_prefix}_results/~{output_prefix}.observed_counts.tsv"
-
-    # Add one line for all cancers
-    cut -f2- "~{output_prefix}_results/~{output_prefix}.observed_counts.tsv" \
-    | awk -v OFS="\t" -v cancer="all" \
-      '{ for (i=1; i<=NF; i++) $i=(a[i]+=$i) }END{ print cancer, $0 }' \
-    >> "~{output_prefix}_results/~{output_prefix}.observed_counts.tsv"
 
     # Next, compare the observed values to expected values under a permuted ull
     Rscript ~{analysis_script} \
