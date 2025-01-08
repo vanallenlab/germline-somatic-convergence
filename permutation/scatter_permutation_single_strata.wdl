@@ -41,18 +41,18 @@ workflow RunPermutations {
     File analysis_script
 
     # Parallelization control
-    Int n_shards = 100
-    Int n_perm_per_shard = 100
+    Int n_shards = 400
+    Int n_perm_per_shard = 25
     Int n_cpu_per_shard = 2
     Float? mem_gb_per_shard
-    Int disk_gb_per_shard = 30
+    Int disk_gb_per_shard = 20
 
     # Analysis control
     Int analysis_n_cpu = 4
     Float? analysis_mem_gb
     Int analysis_disk_gb = 30
     
-    String docker = "vanallenlab/g2c_pipeline:r_argparse"
+    String docker = "vanallenlab/rlctools:latest"
   }
 
   Int total_n_perms = n_shards * n_perm_per_shard
@@ -385,6 +385,7 @@ task PermuteOverlaps {
               --tsv-in $weights \
               --seed "$qseed" \
               --eligible-genes $cancer.gex_q$q.genes.list \
+              --no-zero-weights \
               --outfile tmp.shuffled.genes.list
             # Note: need to break this up to avoid Rcript throwing SIGPIPE error
             head -n $n tmp.shuffled.genes.list \
@@ -399,6 +400,7 @@ task PermuteOverlaps {
               --tsv-in $weights \
               --seed "$seed" \
               --eligible-genes $elig_list \
+              --no-zero-weights \
               --outfile tmp.shuffled.genes.list
             # Note: need to break this up to avoid Rcript throwing SIGPIPE error
             head -n $n_genes tmp.shuffled.genes.list \
@@ -451,7 +453,7 @@ task PermuteOverlaps {
     disks: "local-disk " + disk_gb + " HDD"
     bootDiskSizeGb: 10
     docker: docker
-    preemptible: 3
+    preemptible: 1
     maxRetries: 1
   }
 
@@ -522,7 +524,7 @@ task ComparePermutedAndEmpirical {
     disks: "local-disk " + disk_gb + " HDD"
     bootDiskSizeGb: 10
     docker: docker
-    preemptible: 3
+    preemptible: 1
     maxRetries: 1
   }
 

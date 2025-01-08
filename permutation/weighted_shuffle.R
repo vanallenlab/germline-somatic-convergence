@@ -48,6 +48,9 @@ parser$add_argument("--cancer", metavar="string", type="character",
                                "for cancer type."))
 parser$add_argument("--eligible-genes", metavar="file", type="character",
                     help=paste("(Optional) file with gene symbols to include"))
+parser$add_argument("--no-zero-weights", action="store_true", default=FALSE,
+                    help=paste("Round all zero and missing weights to the",
+                               "smallest non-zero weight present in --tsv-in"))
 parser$add_argument("--outfile", metavar=".txt", type="character", default="stdout",
                     help=paste("path to output file [default: stdout]. If",
                                "a file is passed as --seed, the value of --outfile",
@@ -56,14 +59,16 @@ parser$add_argument("--outfile", metavar=".txt", type="character", default="stdo
 args <- parser$parse_args()
 
 # # DEV (single):
-# args <- list("tsv_in" = "~/scratch/gene_weights.uniform.tsv",
+# args <- list("tsv_in" = "/Users/ryan/Partners HealthCare Dropbox/Ryan Collins/VanAllen/VALab_germline_somatic_2023/other_data/permutation_weights/gene_weights.composite_germline_noncoding.tsv",
 #              "seed" = "0btgecc1",
-#              "eligible_genes" = "~/scratch/gencode.v44.autosomal.protein_coding.genes.list",
+#              "eligible_genes" = "/Users/ryan/Partners HealthCare Dropbox/Ryan Collins/VanAllen/VALab_germline_somatic_2023/other_data/gencode.v47.autosomal.protein_coding.genes.list",
+#              "no_zero_weights" = TRUE,
 #              "outfile" = "~/scratch/shuffled_genes.dev.list")
 
 # # DEV (multi):
 # args <- list("tsv_in" = "~/Dropbox (Partners HealthCare)/VanAllen/VALab_germline_somatic_2023/other_data/permutation_weights/gene_weights.coding_nonsynonymous.tsv",
 #              "seed" = "~/scratch/test_seeds.list",
+#              "no_zero_weights" = TRUE,
 #              "outfile" = "~/scratch/shuffled_genes.dev.list")
 
 # Read genes and weights
@@ -79,6 +84,19 @@ if(!is.null(args$cancer)){
 if(!is.null(args$eligible_genes)){
   elig <- read.table(args$eligible_genes, header=F)[, 1]
   x <- x[which(x[, 1] %in% elig), ]
+  missing.genes <- elig[which(!elig %in% x$gene)]
+  if(length(missing.genes) > 0){
+    x <- as.data.frame(rbind(x, data.frame("gene" = missing.genes, "weight" = 0)))
+  }
+}
+
+# Enforce nonzero weights, if optioned
+if(args$no_zero_weights){
+  zero.weights <- which(x$weight <= 0 | is.na(x$weight))
+  if(length(zero.weights) > 0){
+    smallest.nonzero <- min(x$weights[-zero.weights], na.rm=T)
+    x$weight[zero.weights] <- smallest.nonzero
+  }
 }
 
 # Ensure genes begin sorted alphabetically and no weights are missing

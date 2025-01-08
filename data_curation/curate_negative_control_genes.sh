@@ -60,14 +60,6 @@ done
 
 
 # Filter all gene lists to protein-coding symbols defined in Gencode
-bedtools intersect -wa -u \
-  -a ~/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/gencode.v47.annotation.gtf.gz \
-  -b <( awk -v OFS="\t" '{ if ($1 != "chrX" && $1 != "chrY") print $1, 1, $2 }' \
-          ~/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/hg38.genome ) \
-| awk -v FS="\t" '{ if ($3=="gene") print $9 }' | fgrep -w protein_coding \
-| sed 's/;/\n/g' | fgrep -w "gene_name" | awk '{ print $NF }' \
-| tr -d "\"" | sort -V | uniq \
-> other_data/gencode.v47.autosomal.protein_coding.genes.list
 for pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
   for csq in coding noncoding; do
     fgrep -xf \

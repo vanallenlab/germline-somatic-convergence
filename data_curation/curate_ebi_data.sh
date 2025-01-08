@@ -32,8 +32,3 @@ $CODEDIR/data_curation/curate_ebi_complexes.py \
   --out-tsv other_data/ebi_complex_portal.all_complexes.tsv \
   $complex_data/*.xml
 
-
-
-
-
-

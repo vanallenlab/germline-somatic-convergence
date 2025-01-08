@@ -16,7 +16,14 @@
 cd ~/Dropbox\ \(Partners\ HealthCare\)/VanAllen/VALab_germline_somatic_2023/
 export CODEDIR=/Users/ryan/Desktop/Collins/VanAllen/germline_somatic_convergence/germline-somatic-convergence
 export WRKDIR=`mktemp -d`
+export OUTDIR=other_data/permutation_weights
 export GTF=/Users/ryan/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/gencode.v47.annotation.gtf.gz
+
+# Reset output directory
+if [ -e $OUTDIR ]; then
+  rm -rf $OUTDIR
+fi
+mkdir $OUTDIR
 
 
 ######################
@@ -25,7 +32,7 @@ export GTF=/Users/ryan/Desktop/Collins/VanAllen/germline_somatic_convergence/dat
 awk -v OFS="\t" '{ print $1, "1" }' \
   other_data/gencode.v47.autosomal.protein_coding.genes.list \
 | sort -Vk1,1 | cat <( echo -e "#gene\tweight" ) - \
-> other_data/permutation_weights/gene_weights.uniform.tsv
+> $OUTDIR/gene_weights.uniform.tsv
 
 
 ################################
@@ -65,44 +72,67 @@ zcat \
 $CODEDIR/data_curation/collect_gene_territory_weights.py \
   --bed-in $WRKDIR/all_gene_territories.bed.gz \
   --genes-list other_data/gencode.v47.autosomal.protein_coding.genes.list \
-  --tsv-out other_data/permutation_weights/gene_weights.genome_territory.tsv
+  --tsv-out $OUTDIR/gene_weights.genome_territory.tsv
+
+
+##############################################
+# 3. Prepare 1000G SNP data for GWAS weights #
+##############################################
+# Note: for computational expediency, primary data filtering was performed on
+# the MGB ERIS cluster. See preprocess_1kg_snps.sh for details
+
+# Copy prepocessed SNP data from ERIStwo to local working directory
+scp \
+  rlc47@eristwo.partners.org:/data/gusev/USERS/rlc47/convergence/sudmant/sudmant.filtered.*.pruned.sites.bed.gz \
+  $WRKDIR/
+
+
+#################################################
+# 4. Prepare GWAS catalog data for GWAS weights #
+#################################################
+# Filter entire GWAS catalog
+$CODEDIR/data_curation/filter_entire_gwas_catalog.R \
+  other_data/gwas_catalog/gwas_catalog_v1.0.2-associations_e113_r2024-12-19.tsv.gz \
+  other_data/gwas_catalog/gwas_catalog_v1.0.2-associations_e113_r2024-12-19.filtered.tsv
+
+# Annotate filtered GWAS catalog for genic overlap
+$CODEDIR/data_curation/annotate_gwas_catalog.py \
+  --tsv-in other_data/gwas_catalog/gwas_catalog_v1.0.2-associations_e113_r2024-12-19.filtered.tsv \
+  --gtf ~/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/gencode.v47.annotation.gtf.gz \
+  --tsv-out other_data/gwas_catalog/gwas_catalog_v1.0.2-associations_e113_r2024-12-19.filtered.annotated.tsv
+gzip -f other_data/gwas_catalog/gwas_catalog_v1.0.2-associations_e113_r2024-12-19.filtered.annotated.tsv
+
+# Compute gene weights for coding and noncoding variants
+$CODEDIR/data_curation/compute_gwas_catalog_weights.R \
+  other_data/gwas_catalog/gwas_catalog_v1.0.2-associations_e113_r2024-12-19.filtered.annotated.tsv.gz \
+  other_data/gencode.v47.autosomal.protein_coding.genes.list \
+  $OUTDIR/gene_weights.gwas_catalog
 
 
 ##########################
-# 3. Coding GWAS weights #
+# 5. Coding GWAS weights #
 ##########################
-# Extract CDS intervals from hg19 liftover of Gencode v47 (for HRC compatability)
-wget \
-  -O $WRKDIR/gencode.v47lift37.annotation.gtf.gz \
-  https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_47/GRCh37_mapping/gencode.v47lift37.annotation.gtf.gz
-zcat $WRKDIR/gencode.v47lift37.annotation.gtf.gz \
-| fgrep -wf other_data/gencode.v47.autosomal.protein_coding.genes.list \
-| awk -v OFS="\t" '{ if ($3=="CDS" && $1 !~ /chrX|chrY|chrM/) print $1, $4, $5, $16 }' \
-| tr -d '";' | sort -Vk1,1 -k2,2n -k3,3n -k4,4V | sed 's/^chr//g' | uniq \
-| bedtools merge -i - -c 4 -o distinct | bgzip -c \
-> $WRKDIR/gencode.v47lift37.autosomal.protein_coding.exons.bed.gz
-tabix -p bed -f $WRKDIR/gencode.v47lift37.autosomal.protein_coding.exons.bed.gz
-
-# Count number of overlaps between HRC SNPs and exons from genes of interest
-wget \
-  -O $WRKDIR/HRC.r1-1.GRCh37.wgs.mac5.sites.vcf.gz \
-  ftp://ngs.sanger.ac.uk/production/hrc/HRC.r1-1/HRC.r1-1.GRCh37.wgs.mac5.sites.vcf.gz
-tabix -p vcf -f $WRKDIR/HRC.r1-1.GRCh37.wgs.mac5.sites.vcf.gz
-tabix \
-  --regions $WRKDIR/gencode.v47lift37.autosomal.protein_coding.exons.bed.gz \
-  $WRKDIR/HRC.r1-1.GRCh37.wgs.mac5.sites.vcf.gz \
-| awk -v OFS="\t" '{ print $1, $2, $2+1 }' | bgzip -c \
-> $WRKDIR/HRC.coding_regions.bed.gz
+# Count number of overlaps between 1000G SNPs and exons from genes of interest
+# Ensures all genes have at least one count so no genes have non-zero weights
 bedtools intersect -wa \
   -a <( zcat $WRKDIR/gencode.v47lift37.autosomal.protein_coding.exons.bed.gz ) \
-  -b $WRKDIR/HRC.coding_regions.bed.gz \
-| cut -f4 | sed 's/,/\n/g' | sort -Vk1,1 | uniq -c | awk -v OFS="\t" '{ print $2, $1 }' \
+  -b $WRKDIR/sudmant.filtered.coding.pruned.sites.bed.gz \
+| cut -f4 | sed 's/,/\n/g' \
+| cat - other_data/gencode.v47.autosomal.protein_coding.genes.list \
+| fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list \
+| sort -Vk1,1 | uniq -c | awk -v OFS="\t" '{ print $2, $1 }' \
 | cat <( echo -e "#gene\tcoding_SNPs" ) - \
-> other_data/permutation_weights/gene_weights.hrc_coding_snps.tsv
+> $OUTDIR/gene_weights.sudmant_coding_snps.tsv
+
+# Composite weight of 1000G SNPs and GWAS catalog hits
+$CODEDIR/data_curation/blend_perm_weights.R \
+  $OUTDIR/gene_weights.gwas_catalog_coding.tsv \
+  $OUTDIR/gene_weights.sudmant_coding_snps.tsv \
+  $OUTDIR/gene_weights.composite_germline_coding.tsv
 
 
 ###########################
-# 4. Other coding weights #
+# 6. Other coding weights #
 ###########################
 # Curate gene-specific nonsynonymous mutation rates from gnomAD
 wget \
@@ -110,41 +140,53 @@ wget \
   https://storage.googleapis.com/gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz
 $CODEDIR/data_curation/curate_coding_mutation_rates.R \
   $WRKDIR/gnomad_metrics.tsv.gz \
-  other_data/permutation_weights/gene_weights.coding_nonsynonymous.tsv
+  other_data/gencode.v47.autosomal.protein_coding.genes.list \
+  $OUTDIR/gene_weights.coding_nonsynonymous.tsv
 
 
 #############################
-# 5. Noncoding GWAS weights #
+# 7. Noncoding GWAS weights #
 #############################
-# Note: relies on data downloaded & processed in section 3, above
+# Note: relies on data downloaded & processed in several sections above
 
 # Subset GTF to gene bodies of autosomal protein-coding genes
-zcat $WRKDIR/gencode.v47lift37.annotation.gtf.gz \
+# Use hg19 liftover of Gencode v47 (for 1000G/hg19 compatability)
+wget -O - \
+  https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_47/GRCh37_mapping/gencode.v47lift37.annotation.gtf.gz
+| gunzip -c \
 | fgrep -wf other_data/gencode.v47.autosomal.protein_coding.genes.list \
+| fgrep -w "gene_type \"protein_coding\"" \
 | awk -v OFS="\t" '{ if ($3=="gene" && $1 !~ /chrX|chrY|chrM/) print $1, $4, $5, $14 }' \
 | tr -d '";' | sed 's/^chr//g' | sort -Vk1,1 -k2,2n -k3,3n -k4,4V  | bgzip -c \
 > $WRKDIR/gencode.v47lift37.autosomal.protein_coding.genes.bed.gz
 tabix -p bed -f $WRKDIR/gencode.v47lift37.autosomal.protein_coding.genes.bed.gz
 
-# Find gene nearest to each noncoding HRC SNP
-bedtools intersect -v \
-  -a $WRKDIR/HRC.r1-1.GRCh37.wgs.mac5.sites.vcf.gz \
-  -b $WRKDIR/gencode.v47lift37.autosomal.protein_coding.exons.bed.gz \
-| awk -v OFS="\t" '{ print $1, $2, $2+1 }' \
-| bedtools closest -a - -b $WRKDIR/gencode.v47lift37.autosomal.protein_coding.genes.bed.gz \
-| awk '{ print $NF }' | sed 's/,/\n/g' | sort -Vk1,1 | uniq -c \
-| awk -v OFS="\t" '{ print $2, $1 }' | cat <( echo -e "#gene\tSNPs_nearby" ) - \
-> other_data/permutation_weights/gene_weights.hrc_noncoding_snps.tsv
+# Find gene nearest to each 1000 Genomes SNP
+bedtools closest \
+  -a $WRKDIR/sudmant.filtered.noncoding.pruned.sites.bed.gz \
+  -b $WRKDIR/gencode.v47lift37.autosomal.protein_coding.genes.bed.gz \
+| awk '{ print $NF }' | sed 's/,/\n/g' \
+| cat - other_data/gencode.v47.autosomal.protein_coding.genes.list \
+| fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list \
+| sort -Vk1,1 | uniq -c | awk -v OFS="\t" '{ print $2, $1 }' \
+| cat <( echo -e "#gene\tSNPs_nearby" ) - \
+> $OUTDIR/gene_weights.sudmant_noncoding_snps.tsv
+
+# Composite weight of 1000G SNPs and GWAS catalog hits
+$CODEDIR/data_curation/blend_perm_weights.R \
+  $OUTDIR/gene_weights.gwas_catalog_noncoding.tsv \
+  $OUTDIR/gene_weights.sudmant_noncoding_snps.tsv \
+  $OUTDIR/gene_weights.composite_germline_noncoding.tsv
 
 
 #####################################
-# 6. Curate GTEx expression weights #
+# 8. Curate GTEx expression weights #
 #####################################
 $CODEDIR/data_curation/curate_gtex_expression.R
 
 
 ###################################################
-# 7. Count of genes to be sampled for each strata #
+# 9. Count of genes to be sampled for each strata #
 ###################################################
 # Re-curate COSMIC-only and GeneBass-only gene lists to identify how many *new* 
 # germline genes are implicated by coding GWAS hits
@@ -235,10 +277,10 @@ done
 
 
 
-###################################################################
-# 8. Count of genes per strata per expression quantile per tissue #
-###################################################################
-n_gex_bins=$( sed '1d' other_data/permutation_weights/gene_weights.expression.cancer_specific.tsv \
+####################################################################
+# 10. Count of genes per strata per expression quantile per tissue #
+####################################################################
+n_gex_bins=$( sed '1d' $OUTDIR/gene_weights.expression.cancer_specific.tsv \
               | cut -f2 | sort -nr | sed -n '1p' )
 mkdir $WRKDIR/gex_elig_lists_tmp
 # One set of counts for each definition of somatic coding variants
@@ -250,7 +292,7 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
       # Define background list of genes in this quantile
       awk -v cancer=$cancer -v q=$q -v FS="\t" \
         '{ if ($2==q && $3==cancer) print $1 }' \
-        other_data/permutation_weights/gene_weights.expression.cancer_specific.tsv \
+        $OUTDIR/gene_weights.expression.cancer_specific.tsv \
       > $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list
       
       # COSMIC germline coding
@@ -329,8 +371,8 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
 done
 
 
-###############
-# 9. Clean up #
-###############
+################
+# 11. Clean up #
+################
 rm -rf $WRKDIR
 

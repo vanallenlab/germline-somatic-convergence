@@ -13,11 +13,15 @@ PedSV::load.constants("scales")
 require(viridis, quietly=T)
 setwd("~/Dropbox (Partners HealthCare)/VanAllen/VALab_germline_somatic_2023")
 gtex.in <- "other_data/gtex_median_expression_gencode_filtered_SH_20231205.csv"
+elig.in <- "other_data/gencode.v47.autosomal.protein_coding.genes.list"
 outdir <- "other_data/permutation_weights"
+nc.pheno <- c("atrial_fibrilation", "inguinal_hernia", "myocardial_infarction")
 
 
-# Read GTEx data
+# Read GTEx data and subset to eligible genes
 gtex <- read.table(gtex.in, sep=",", header=T, check.names=F)
+elig <- read.table(elig.in, header=F)[, 1]
+gtex <- gtex[which(gtex$Gene %in% elig), ]
 
 
 # Get organ-level averages for organs with multiple biopsy sites
@@ -28,13 +32,13 @@ gtex <- gtex[, -grep("Kidney - ", colnames(gtex), fixed=T)]
 
 
 # Deduplicate genes
-gtex <- gtex[-which(duplicated(gtex$Gene)), ]
+gtex <- gtex[!duplicated(gtex$Gene), ]
 
 
 # Divide all genes for each tissue into quintiles by expression in tissue
 # Genes with strictly zero expression in a tissue are assigned to a sixth "quintile"
 gtex.raw <- gtex
-# Add a fifth bin for all unexpressed genes
+# Add a sixth bin for all unexpressed genes
 gtex[, -1] <- apply(gtex[, -1], 2, function(vals){
   # First, hold out all genes with strictly zero expression
   # These will be assigned to their own "quintile"
@@ -47,6 +51,17 @@ gtex[, -1] <- apply(gtex[, -1], 2, function(vals){
   return(assignments)
 })
 
+
+# Assign all missing genes as belonging to the third quintile (so the fourth bin
+# after accounting for unexpressed genes)
+missing.df <- data.frame("Gene" = elig[which(!elig %in% gtex$Gene)],
+           "Breast - Mammary Tissue" = 4,
+           "Lung" = 4,
+           "Prostate" = 4,
+           "Colon" = 4,
+           "Kidney" = 4, check.names=F)
+gtex <- as.data.frame(rbind(gtex, missing.df))
+
 # Make matrix of weights for all tissues
 t2c.map <- c("Breast - Mammary Tissue" = "breast",
              "Lung" = "lung",
@@ -57,7 +72,12 @@ expression.weights <- do.call("rbind", lapply(colnames(gtex)[-1], function(tissu
   sub.df <- gtex[, c(1, which(colnames(gtex) == tissue))]
   sub.df$cancer <- t2c.map[tissue]
   colnames(sub.df) <- c("gene", "weight", "cancer")
-  return(sub.df)
+  nc.sub.df <- as.data.frame(do.call("rbind", lapply(nc.pheno, function(pheno){
+    sub.df2 <- sub.df
+    sub.df2$cancer <- paste(t2c.map[tissue], pheno, sep="_")
+    return(sub.df2)
+  })))
+  return(as.data.frame(rbind(sub.df, nc.sub.df)))
 }))
 
 # Write expression weights to file
@@ -71,6 +91,7 @@ pdf(paste(outdir, "/../../results/expression_bins_per_tissue.pdf", sep=""),
 par(mfrow=c(2, 3), bty="n")
 sapply(1:length(t2c.map), function(k){
   vals <- log10(gtex.raw[, names(t2c.map)[k]] + 10e-3)
+  vals <- c(vals, rep(median(vals), nrow(missing.df)))
   h <- hist(vals, breaks=100, plot=F)
   prep.plot.area(xlims=range(h$breaks), ylims=c(0, max(h$counts)),
                  parmar=c(3, 3, 2, 1))
@@ -84,8 +105,8 @@ sapply(1:length(t2c.map), function(k){
   })
   clean.axis(1, at=log10(logscale.major), labels=logscale.major, title="GTEx TPM")
   clean.axis(2, title="Genes")
-  mtext(3, line=0, font=2, 
-        text=paste(toupper(substr(t2c.map[k], 1, 1)), 
+  mtext(3, line=0, font=2,
+        text=paste(toupper(substr(t2c.map[k], 1, 1)),
                    substr(t2c.map[k], 2, 100), sep=""))
 })
 prep.plot.area(c(0, 1), c(0, 1), rep(1, 4))
