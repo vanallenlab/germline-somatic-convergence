@@ -20,12 +20,18 @@ if(!dir.exists(outdir)){
   dir.create(outdir)
 }
 
-
 # Read IntOGen driver compendium
-idat <- read.table(intogen.in, sep="\t", header=T)
+idat <- read.table(intogen.in, sep="\t", header=T, check.names=F)
 
 # Only retain genes with FDR Q<0.05
 idat <- idat[which(idat$QVALUE_COMBINATION < 0.05), ]
+
+# Only retain genes with >=2% frequency in cancer type
+idat <- idat[which(idat$`%_SAMPLES_COHORT` >= 0.02), ]
+
+# Only retain genes implicated by intOGen combination or multiple methods
+idat <- idat[union(which(idat$METHODS == "combination"),
+                   grep(",", idat$METHODS)), ]
 
 # Build map of eligible cancer terms
 # This must be done manually from IntoGen metadata

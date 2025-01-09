@@ -81,6 +81,7 @@ for cancer in breast colorectal lung prostate renal; do
   $CODEDIR/data_curation/annotate_gwas_catalog.py \
     --tsv-in other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.tsv \
     --gtf ~/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/gencode.v47.annotation.gtf.gz \
+    --eligible-genes other_data/gencode.v47.autosomal.protein_coding.genes.list \
     --tsv-out other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv
 done
 
@@ -91,7 +92,7 @@ for cancer in breast colorectal lung prostate renal; do
   idx=$( head -n1 $gwas_tsv | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
 
   # Combine coding genes with COSMIC genes
-  awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' $gwas_tsv \
+  awk -v FS="\t" -v idx=$idx '{ if ($NF=="CDS") print $idx }' $gwas_tsv \
   | sed 's/, /\n/g' \
   | cat - gene_lists/germline_coding/$cancer.germline.coding.genes.list \
   | sort -V | uniq \
@@ -101,7 +102,7 @@ for cancer in breast colorectal lung prostate renal; do
     gene_lists/germline_coding/$cancer.germline.coding.genes.list
 
   # Extract noncoding genes
-  awk -v FS="\t" -v idx=$idx '{ if ($NF!="coding_exon") print $idx }' $gwas_tsv \
+  awk -v FS="\t" -v idx=$idx '{ if ($NF!="CDS") print $idx }' $gwas_tsv \
   | sed 's/, /\n/g' | sed 's/ - /\n/g' | fgrep -v MAPPED_GENE | sort -V | uniq \
   > gene_lists/germline_noncoding/$cancer.germline.noncoding.genes.list
 done
@@ -152,3 +153,4 @@ for cancer in breast colorectal lung prostate renal; do
   find gene_lists/ -name "$cancer.*.*.genes.list" \
   | xargs -I {} cat {} | sort -V | uniq | wc -l
 done | paste - - - - - - -
+

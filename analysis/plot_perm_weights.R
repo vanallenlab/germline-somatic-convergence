@@ -19,8 +19,8 @@ load.weights <- function(path){
 }
 weights <- list("coding_mu" = load.weights("other_data/permutation_weights/gene_weights.coding_nonsynonymous.tsv"),
                 "somatic_noncoding" = load.weights("other_data/permutation_weights/gene_weights.genome_territory.tsv"),
-                "coding_gwas" = load.weights("other_data/permutation_weights/gene_weights.hrc_coding_snps.tsv"),
-                "noncoding_gwas" = load.weights("other_data/permutation_weights/gene_weights.hrc_noncoding_snps.tsv"))
+                "coding_gwas" = load.weights("other_data/permutation_weights/gene_weights.composite_germline_coding.tsv"),
+                "noncoding_gwas" = load.weights("other_data/permutation_weights/gene_weights.composite_germline_noncoding.tsv"))
 
 # Plot weights
 plot.weights <- function(df, title=NULL, units="Sampling Probability", breaks=1000){

@@ -21,6 +21,9 @@ args <- commandArgs(trailingOnly=TRUE)
 # Read raw loci
 loci <- read.table(args[1], header=T, sep="\t", check.names=F, quote="")
 
+# Only retain autosomal variants
+loci <- loci[which(loci$CHR_ID %in% 1:22), ]
+
 # Only retain loci with at least one mapped gene
 loci <- loci[which(loci$MAPPED_GENE != "" & !is.na(loci$MAPPED_GENE)), ]
 

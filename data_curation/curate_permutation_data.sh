@@ -214,7 +214,7 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
     # Other germline coding contributed by GWAS (after excluding COSMIC)
     idx=$( head -n1 other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
            | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
-    awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
+    awk -v FS="\t" -v idx=$idx '{ if ($NF=="CDS") print $idx }' \
       other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
     | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
     | fgrep -xvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
@@ -229,7 +229,7 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
       # Other germline coding contributed by GWAS (after excluding GeneBass)
       idx=$( head -n1 other_data/gwas_catalog/$nc_pheno.gwas_catalog.12_11_24.filtered.annotated.tsv \
              | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
-      awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
+      awk -v FS="\t" -v idx=$idx '{ if ($NF=="CDS") print $idx }' \
         other_data/gwas_catalog/$nc_pheno.gwas_catalog.12_11_24.filtered.annotated.tsv \
       | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
       | fgrep -xvf $WRKDIR/genebass_tmp/germline_coding/$nc_pheno.germline.coding.genes.list \
@@ -308,7 +308,7 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
       # Other germline coding contributed by GWAS (after excluding COSMIC)
       idx=$( head -n1 other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
              | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
-      awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
+      awk -v FS="\t" -v idx=$idx '{ if ($NF=="CDS") print $idx }' \
         other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
       | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
       | fgrep -xvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
@@ -317,7 +317,7 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
       for nc_pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
         idx=$( head -n1 other_data/gwas_catalog/$nc_pheno.gwas_catalog.12_11_24.filtered.annotated.tsv \
                | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
-        awk -v FS="\t" -v idx=$idx '{ if ($NF=="coding_exon") print $idx }' \
+        awk -v FS="\t" -v idx=$idx '{ if ($NF=="CDS") print $idx }' \
           other_data/gwas_catalog/$nc_pheno.gwas_catalog.12_11_24.filtered.annotated.tsv \
         | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
         | fgrep -xvf $WRKDIR/genebass_tmp/germline_coding/$nc_pheno.germline.coding.genes.list \
