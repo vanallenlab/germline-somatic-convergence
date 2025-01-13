@@ -26,6 +26,7 @@ workflow ScatterPermutations {
     File noncoding_gwas_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
+    File gene_chrom_map_tsv
     File expression_quantiles
 
     # Reference files for assessing overlap
@@ -68,6 +69,7 @@ workflow ScatterPermutations {
       noncoding_gwas_weights = noncoding_gwas_weights,
       somatic_noncoding_weights = somatic_noncoding_weights,
       eligible_gene_symbols = eligible_gene_symbols,
+      gene_chrom_map_tsv = gene_chrom_map_tsv,
       expression_quantiles = expression_quantiles,
       expression_quantile_gene_counts_tsv = expression_quantile_gene_counts_tsvs[i],
       cellchat_csv = cellchat_csv,
