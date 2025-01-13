@@ -13,8 +13,9 @@ import pandas as pd
 import xmltodict
 from os.path import basename
 from re import sub
+from scipy.stats import poisson
 
-# Declare list of less specific interaction types
+# Declare lists of interaction types with varying specificity
 direct_nofunc_itypes = ['direct interaction', 'putative self interaction', 'self interaction']
 indirect_itypes = ['physical association']
 drop_itypes = ['colocalization', 'proximity', 'association']
@@ -159,8 +160,43 @@ def format_output_tsv(res):
     res_df = pd.concat(res, ignore_index=True)
     res_df.columns = '#interaction type members'.split()
 
-    # Deduplicate by members
+    # Rank by interaction priority and deduplicate by members
+    type_order = 'direct_functional direct_unknown indirect'.split()
+    res_df['type'] = pd.Categorical(res_df['type'], type_order)
+    res_df = res_df.sort_values('type')
     return res_df.loc[~res_df.members.duplicated(), :].reset_index(drop=True)
+
+
+def filter_indirect_outliers(res_df, elig=None):
+    """
+    Excludes indirect interactions involving outlier genes
+    Outlier genes are defined as those involved in a greater number of 
+    indirect interactions than expected based on a Poisson test corrected for
+    the total number of genes
+    """
+
+    # Count number of indirect interactions per gene
+    is_indirect = res_df.type == 'indirect'
+    counts = res_df.loc[is_indirect, 'members'].\
+                    str.split(';').explode().value_counts()
+    if elig is not None:
+        zcounts = pd.Series(0, index=elig)
+        zcounts.update(counts)
+        counts = zcounts
+
+    # Compute Poisson p-value per gene
+    mean_count = counts.mean()
+    pvals = 1 - counts.apply(poisson.cdf, mu=mean_count)
+
+    # Determine outliers after Bonferroni correction
+    cutoff = 0.05 / len(pvals)
+    outliers = set(pvals.index[pvals < cutoff].values.tolist())
+
+    # Remove all indirect interactions involving outlier genes
+    def _has_outlier(members, outliers):
+        return len(set(members).intersection(outliers)) > 0
+    is_outlier = res_df.members.str.split(';').apply(_has_outlier, outliers=outliers)
+    return res_df.loc[~(is_indirect & is_outlier), :]
 
 
 def main():
@@ -187,21 +223,30 @@ def main():
 
     # Process each .xml file
     res = []
+    neg_res = []
     for xml_in in args.xml:
         cpx_id = sub('\.xml$', '', sub('_human', '', basename(xml_in)))
+        new_df = get_ppis(xml_in, return_dataframe=True, eligible_genes=elig, 
+                          max_members=args.max_members)
         if cpx_id.endswith('_negative'):
-            continue
-        res.append(get_ppis(xml_in, return_dataframe=True, eligible_genes=elig, 
-                            max_members=args.max_members))
+            neg_res.append(new_df)
+        else:
+            res.append(new_df)
+
+    # Format output as a three-column pd.DataFrame of interaction id, tier, 
+    # and member gene symbols
+    res_df = format_output_tsv(res)
+    neg_df = format_output_tsv(neg_res)
 
     # Exclude any interactions listed in the "negative" XML files
     # Per EBI documentation, these are interactions that have been refuted by
     # published evidence, and it sounds like they set a pretty high bar for this
-    # TODO: could implement this in the future
+    res_df = res_df[~res_df.members.isin(neg_df.members)]
 
-    # Format output as a three-column pd.DataFrame of interaction id, tier, 
-    # and member gene symbols before writing to --out-tsv
-    res_df = format_output_tsv(res)
+    # Filter indirect interactions to exclude interactions involving outlier genes
+    res_df = filter_indirect_outliers(res_df, elig)
+
+    # Write to --out-tsv 
     res_df.to_csv(args.out_tsv, sep='\t', index=False, na_rep='NA')
 
 

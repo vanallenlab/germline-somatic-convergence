@@ -26,6 +26,7 @@ workflow RunPermutations {
     File noncoding_gwas_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
+    File gene_chrom_map_tsv
     File expression_quantiles
 
 
@@ -68,6 +69,7 @@ workflow RunPermutations {
         noncoding_gwas_weights = uniform_weights,
         somatic_noncoding_weights = uniform_weights,
         eligible_gene_symbols = eligible_gene_symbols,
+        gene_chrom_map_tsv = gene_chrom_map_tsv,
         cellchat_csv = cellchat_csv,
         ppi_tsv = ppi_tsv,
         complexes_tsv = complexes_tsv,
@@ -90,6 +92,7 @@ workflow RunPermutations {
         noncoding_gwas_weights = noncoding_gwas_weights,
         somatic_noncoding_weights = somatic_noncoding_weights,
         eligible_gene_symbols = eligible_gene_symbols,
+        gene_chrom_map_tsv = gene_chrom_map_tsv,
         cellchat_csv = cellchat_csv,
         ppi_tsv = ppi_tsv,
         complexes_tsv = complexes_tsv,
@@ -112,6 +115,7 @@ workflow RunPermutations {
         noncoding_gwas_weights = uniform_weights,
         somatic_noncoding_weights = uniform_weights,
         eligible_gene_symbols = eligible_gene_symbols,
+        gene_chrom_map_tsv = gene_chrom_map_tsv,
         expression_quantiles = expression_quantiles,
         expression_quantile_gene_counts_tsv = expression_quantile_gene_counts_tsv,
         cellchat_csv = cellchat_csv,
@@ -136,6 +140,7 @@ workflow RunPermutations {
         noncoding_gwas_weights = noncoding_gwas_weights,
         somatic_noncoding_weights = somatic_noncoding_weights,
         eligible_gene_symbols = eligible_gene_symbols,
+        gene_chrom_map_tsv = gene_chrom_map_tsv,
         expression_quantiles = expression_quantiles,
         expression_quantile_gene_counts_tsv = expression_quantile_gene_counts_tsv,
         cellchat_csv = cellchat_csv,
@@ -266,6 +271,7 @@ task PermuteOverlaps {
     File noncoding_gwas_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
+    File gene_chrom_map_tsv
     File? expression_quantiles
     File? expression_quantile_gene_counts_tsv
 
@@ -321,7 +327,12 @@ task PermuteOverlaps {
       fi
 
       # Permute each strata with related but distinct seeds
-      while read cancer origin context n_genes; do
+      while read cancer origin context contig n_genes; do
+
+        # Subset eligible genes to chromosome of interest
+        awk -v chrom="$chrom" '{ if ($2==chrom) print $1 }' ~{gene_chrom_map_tsv} \
+        | fgrep -xf ~{eligible_gene_symbols} \
+        > "elig.$contig.genes.list"
 
         # Define strata-specific weights
         case "${origin}_${context}" in
@@ -330,22 +341,22 @@ task PermuteOverlaps {
             # For coding GWAS hits, by design we want to exclude genes that were
             # already sampled from the coding germline COSMIC set
             fgrep \
-              -wvf gene_lists/germline_coding_cosmic/$cancer.germline.coding_cosmic.genes.list \
-              ~{eligible_gene_symbols} \
+              -xvf gene_lists/germline_coding_cosmic/$cancer.germline.coding_cosmic.genes.list \
+              "elig.$contig.genes.list" \
             > tmp.coding_gwas.elig_genes.list
             elig_list=tmp.coding_gwas.elig_genes.list
             ;;
           germline_noncoding)
             weights=~{noncoding_gwas_weights}
-            elig_list=~{eligible_gene_symbols}
+            elig_list="elig.$contig.genes.list"
             ;;
           somatic_noncoding)
             weights=~{somatic_noncoding_weights}
-            elig_list=~{eligible_gene_symbols}
+            elig_list="elig.$contig.genes.list"
             ;;
           *)
             weights=~{coding_nonsyn_weights}
-            elig_list=~{eligible_gene_symbols}
+            elig_list="elig.$contig.genes.list"
             ;;
         esac
 
@@ -404,7 +415,7 @@ task PermuteOverlaps {
               --outfile tmp.shuffled.genes.list
             # Note: need to break this up to avoid Rcript throwing SIGPIPE error
             head -n $n_genes tmp.shuffled.genes.list \
-            > gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+            >> gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
           else
             touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
           fi

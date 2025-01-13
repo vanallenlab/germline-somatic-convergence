@@ -108,9 +108,7 @@ for cancer in breast colorectal lung prostate renal; do
 done
 
 
-# Filter all gene lists to protein-coding symbols defined in Gencode
-# Excludes unnamed Ensembl ENSG notation, as these symbols do not show up
-# in any of our other datasets so therefore are false inclusions in this list
+# Curate list of eligible protein-coding autosomal genes in Gencode
 bedtools intersect -wa -u \
   -a ~/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/gencode.v47.annotation.gtf.gz \
   -b <( awk -v OFS="\t" '{ if ($1 != "chrX" && $1 != "chrY" && $1 != "chrM") print $1, 1, $2 }' \
@@ -119,6 +117,11 @@ bedtools intersect -wa -u \
 | sed 's/;/\n/g' | fgrep -w "gene_name" | awk '{ print $NF }' \
 | tr -d "\"" | sort -V | uniq | grep -ve '^ENSG' \
 > other_data/gencode.v47.autosomal.protein_coding.genes.list
+
+
+# Filter all gene lists to protein-coding symbols defined in Gencode
+# Excludes unnamed Ensembl ENSG notation, as these symbols do not show up
+# in any of our other datasets so therefore are false inclusions in this list
 for cancer in breast colorectal lung prostate renal; do
   for context in somatic germline; do
     for csq in coding noncoding; do

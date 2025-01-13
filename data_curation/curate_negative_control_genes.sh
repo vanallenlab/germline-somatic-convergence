@@ -10,37 +10,48 @@ cd ~/Dropbox\ \(Partners\ HealthCare\)/VanAllen/VALab_germline_somatic_2023
 export CODEDIR=/Users/ryan/Desktop/Collins/VanAllen/germline_somatic_convergence/germline-somatic-convergence
 
 
+# Enumerate negative control pairings
+TAB="$( printf '\t' )"
+cat << EOF > other_data/negative_control_phenotype_pairs.tsv
+breast${TAB}inguinal_hernia
+colorectal${TAB}hair_loss
+lung${TAB}menarche
+prostate${TAB}anxiety
+renal${TAB}reflux
+EOF
+
+
 # Filter GeneBass associations
-for pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+while read cancer pheno; do
   $CODEDIR/data_curation/filter_genebass.R \
     other_data/genebass/$pheno.lof.genebass.csv \
     other_data/genebass/$pheno.mislc.genebass.csv \
     gene_lists/germline_coding/$pheno.germline.coding.genes.list
-done
+done < other_data/negative_control_phenotype_pairs.tsv
 
 
 # Filter germline loci from GWAS catalog
-for pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+while read cancer pheno; do
   $CODEDIR/data_curation/filter_gwas_loci.R \
-    other_data/gwas_catalog/$pheno.gwas_catalog.12_11_24.unfiltered.tsv \
-    other_data/gwas_catalog/$pheno.gwas_catalog.12_11_24.filtered.tsv
-done
+    other_data/gwas_catalog/$pheno.gwas_catalog.01_13_25.unfiltered.tsv \
+    other_data/gwas_catalog/$pheno.gwas_catalog.01_13_25.filtered.tsv
+done < other_data/negative_control_phenotype_pairs.tsv
 
 
 # Annotate GWAS catalog for gene overlap
-for pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+while read cancer pheno; do
   echo $pheno
   $CODEDIR/data_curation/annotate_gwas_catalog.py \
-    --tsv-in other_data/gwas_catalog/$pheno.gwas_catalog.12_11_24.filtered.tsv \
+    --tsv-in other_data/gwas_catalog/$pheno.gwas_catalog.01_13_25.filtered.tsv \
     --gtf ~/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/gencode.v47.annotation.gtf.gz \
     --eligible-genes other_data/gencode.v47.autosomal.protein_coding.genes.list \
-    --tsv-out other_data/gwas_catalog/$pheno.gwas_catalog.12_11_24.filtered.annotated.tsv
-done
+    --tsv-out other_data/gwas_catalog/$pheno.gwas_catalog.01_13_25.filtered.annotated.tsv
+done < other_data/negative_control_phenotype_pairs.tsv
 
 
 # Divide GWAS catalog into coding & noncoding subsets
-for pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
-  gwas_tsv=other_data/gwas_catalog/$pheno.gwas_catalog.12_11_24.filtered.annotated.tsv
+while read cancer pheno; do
+  gwas_tsv=other_data/gwas_catalog/$pheno.gwas_catalog.01_13_25.filtered.annotated.tsv
   idx=$( head -n1 $gwas_tsv | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
 
   # Combine coding genes with GeneBass genes
@@ -57,11 +68,11 @@ for pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
   awk -v FS="\t" -v idx=$idx '{ if ($NF!="CDS") print $idx }' $gwas_tsv \
   | sed 's/, /\n/g' | sed 's/ - /\n/g' | fgrep -v MAPPED_GENE | sort -V | uniq \
   > gene_lists/germline_noncoding/$pheno.germline.noncoding.genes.list
-done
+done < other_data/negative_control_phenotype_pairs.tsv
 
 
 # Filter all gene lists to protein-coding symbols defined in Gencode
-for pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+while read cancer pheno; do
   for csq in coding noncoding; do
     fgrep -xf \
       other_data/gencode.v47.autosomal.protein_coding.genes.list \
@@ -71,16 +82,16 @@ for pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
       gene_lists/germline_${csq}/$pheno.germline.$csq.genes.list2 \
       gene_lists/germline_${csq}/$pheno.germline.$csq.genes.list
   done
-done
+done < other_data/negative_control_phenotype_pairs.tsv
 
 
 # Get table of counts
-for pheno in inguinal_hernia atrial_fibrilation myocardial_infarction; do
+while read cancer pheno; do
   cat gene_lists/germline_coding/$pheno.germline.coding.genes.list | wc -l
   cat gene_lists/germline_noncoding/$pheno.germline.noncoding.genes.list | wc -l
   cat \
     gene_lists/germline_coding/$pheno.germline.coding.genes.list \
     gene_lists/germline_noncoding/$pheno.germline.noncoding.genes.list \
   | sort -V | uniq | wc -l
-done | paste - - -
+done < other_data/negative_control_phenotype_pairs.tsv | paste - - -
 

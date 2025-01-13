@@ -63,7 +63,7 @@ fill.summary.data <- function(df){
   df[, paste(strata.bases, "any", sep=".")] <- t4p
 
   # Make summary rows for pooled result across all cancers
-  # and, separately, each negative control phenotype
+  # and, separately, all negative control phenotype
   prim.cancers <- sort(unique(df$cancer[grep("_", df$cancer, invert=T)]))
   nc.phenos <- sort(unique(sapply(setdiff(df$cancer, prim.cancers), function(ps){
     paste(unlist(strsplit(ps, split="_"))[-1], collapse="_")
@@ -80,11 +80,19 @@ fill.summary.data <- function(df){
       append.df <- as.data.frame(t(data.frame(c("any", major.idx, minor.idx, ac))))
       colnames(append.df) <- colnames(sub.df)
       for(pheno in nc.phenos){
-        ac <- as.numeric(apply(sub.df[grep(pheno, sub.df$cancer), -(1:3)],
-                               2, function(v){sum(as.numeric(v), na.rm=T)}))
-        append.df <- as.data.frame(rbind(append.df, c(paste("any", pheno, sep="_"),
-                                                major.idx, minor.idx, ac)))
+        if(length(unique(sub.df$cancer[grep(pheno, sub.df$cancer)])) > 1){
+          ac <- as.numeric(apply(sub.df[grep(pheno, sub.df$cancer), -(1:3)],
+                                 2, function(v){sum(as.numeric(v), na.rm=T)}))
+          append.df <- as.data.frame(rbind(append.df, c(paste("any", pheno, sep="_"),
+                                                        major.idx, minor.idx, ac)))
+        }
       }
+      any.nc.idx <- intersect(grep(paste(prim.cancers, collapse="|"), sub.df$cancer),
+                              grep(paste(nc.phenos, collapse="|"), sub.df$cancer))
+      ac <- as.numeric(apply(sub.df[any.nc.idx, -(1:3)], 2,
+                             function(v){sum(as.numeric(v), na.rm=T)}))
+      append.df <- as.data.frame(rbind(append.df, c("any_negative_control",
+                                              major.idx, minor.idx, ac)))
       rownames(append.df) <- NULL
       df <- as.data.frame(rbind(df, append.df))
       df[, -c(1:3)] <- apply(df[, -c(1:3)], 2, as.numeric)
@@ -94,10 +102,17 @@ fill.summary.data <- function(df){
                            2, sum, na.rm=T))
     df <- as.data.frame(rbind(df, c("any", ac)))
     for(pheno in nc.phenos){
-      ac <- as.numeric(apply(df[grep(pheno, df$cancer), -1], 2,
-                             function(v){sum(as.numeric(v), na.rm=T)}))
-      df <- as.data.frame(rbind(df, c(paste("any", pheno, sep="_"), ac)))
+      if(length(unique(df$cancer[grep(pheno, df$cancer)])) > 1){
+        ac <- as.numeric(apply(df[grep(pheno, df$cancer), -1], 2,
+                               function(v){sum(as.numeric(v), na.rm=T)}))
+        df <- as.data.frame(rbind(df, c(paste("any", pheno, sep="_"), ac)))
+      }
     }
+    any.nc.idx <- intersect(grep(paste(prim.cancers, collapse="|"), df$cancer),
+                            grep(paste(nc.phenos, collapse="|"), df$cancer))
+    ac <- as.numeric(apply(df[any.nc.idx, -1], 2,
+                           function(v){sum(as.numeric(v), na.rm=T)}))
+    df <- as.data.frame(rbind(df, c("any_negative_control", ac)))
     df[, -1] <- apply(df[, -1], 2, as.numeric)
   }
 
@@ -166,7 +181,7 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
     mtext(3, line=6, text=title.case(l6, case="sentence"))
     l5 <- sub("any", "all", paste(c(strata.parts[[1]][2:1], "Variants"), collapse=" "))
     mtext(3, line=5, text=title.case(l5, case="sentence"))
-    l4 <- sub("any", "all", paste(c(strata.parts[[2]][2:1], "Variants"), collapse=" "))
+    l4 <- sub("any", "all", paste(c(strata.parts[[2]][2:1], "Alterations"), collapse=" "))
     mtext(3, line=4, text=title.case(l4, case="sentence"))
     l3 <- strata.labels[strata.parts[[3]][1]]
     mtext(3, line=3, text=title.case(l3, case="sentence"))
