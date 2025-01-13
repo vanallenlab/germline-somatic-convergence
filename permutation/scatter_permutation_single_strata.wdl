@@ -330,7 +330,7 @@ task PermuteOverlaps {
       while read cancer origin context contig n_genes; do
 
         # Subset eligible genes to chromosome of interest
-        awk -v chrom="$chrom" '{ if ($2==chrom) print $1 }' ~{gene_chrom_map_tsv} \
+        awk -v chrom="$contig" '{ if ($2==chrom) print $1 }' ~{gene_chrom_map_tsv} \
         | fgrep -xf ~{eligible_gene_symbols} \
         > "elig.$contig.genes.list"
 
