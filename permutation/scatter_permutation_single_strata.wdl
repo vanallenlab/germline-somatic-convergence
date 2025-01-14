@@ -439,8 +439,8 @@ task PermuteOverlaps {
           echo "       for permutation $i for $cancer $origin $context. Exiting."
           exit 1
         fi
-      done < ( cut -f1-3 ~{strata_gene_counts_tsv} \
-               | sort -Vk1,1 -k2,2V -k3,3V | uniq )
+      done < <( cut -f1-3 ~{strata_gene_counts_tsv} \
+                | sort -Vk1,1 -k2,2V -k3,3V | uniq )
 
 
       # Find pairs per cancer type
