@@ -114,7 +114,7 @@ if(file.exists(args$seed)){
 }
 
 # Shuffle once per seed
-sapply(seeds, function(seed){
+trap <- sapply(seeds, function(seed){
 
   # Set seed
   char2seed(seed)

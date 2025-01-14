@@ -289,6 +289,7 @@ task PermuteOverlaps {
     Int n_cpu = 2
     Float? mem_gb
     Int disk_gb = 30
+    Int n_preemptible = 1
   }
 
   String outfile_name = "perm_results." + shard_number + ".tsv"
@@ -382,6 +383,7 @@ task PermuteOverlaps {
           # Shuffle & sample each expression quantile separately, if optioned
           while read q n; do
             if [ $n -eq 0 ]; then
+              touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
               continue
             fi
             # Define list of genes in this expression quantile in this tissue
@@ -401,9 +403,10 @@ task PermuteOverlaps {
             # Note: need to break this up to avoid Rcript throwing SIGPIPE error
             head -n $n tmp.shuffled.genes.list \
             >> gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
-          done < <( awk -v FS="\t" -v OFS="\t" -v cancer=$cancer -v origin=$origin -v context=$context \
-                      '{ if ($1==cancer && $3==origin && $4==context) print $2, $5 }' \
-                      ~{expression_quantile_gene_counts_tsv} )
+          done < <( awk -v FS="\t" -v OFS="\t" -v cancer="$cancer" -v origin="$origin" \
+                        -v context="$context" -v contig="$contig" \
+                        '{ if ($1==cancer && $3==origin && $4==context && $5==contig) print $2, $6 }' \
+                        ~{expression_quantile_gene_counts_tsv} )
         else
           if [ $n_genes -gt 0 ]; then
             # Shuffle genes, restrict to eligible gene symbols, and sample desired number
@@ -422,6 +425,23 @@ task PermuteOverlaps {
         fi
 
       done < ~{strata_gene_counts_tsv}
+
+      # Consistency check: ensure number of genes sampled matches expected number
+      while read cancer origin context; do
+        n_expected=$( awk \
+                        -v FS="\t" -v cancer="$cancer" \
+                        -v origin="$origin" -v context="$context" \
+                        '{ if ($1==cancer && $2==origin && $3==context) sum+=$5 }END{ print sum }' \
+                        ~{strata_gene_counts_tsv} )
+        n_sampled=$( cat gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list | wc -l )
+        if [ $n_expected -ne $n_sampled ]; then
+          echo "Error: number of sampled genes ($n_sampled) does not match number of expected genes ($n_expected)"
+          echo "       for permutation $i for $cancer $origin $context. Exiting."
+          exit 1
+        fi
+      done < ( cut -f1-3 ~{strata_gene_counts_tsv} \
+               | sort -Vk1,1 -k2,2V -k3,3V | uniq )
+
 
       # Find pairs per cancer type
       while read cancer; do
@@ -464,7 +484,7 @@ task PermuteOverlaps {
     disks: "local-disk " + disk_gb + " HDD"
     bootDiskSizeGb: 10
     docker: docker
-    preemptible: 1
+    preemptible: n_preemptible
     maxRetries: 1
   }
 
