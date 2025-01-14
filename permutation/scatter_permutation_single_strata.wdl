@@ -383,31 +383,32 @@ task PermuteOverlaps {
            [ ~{defined(expression_quantile_gene_counts_tsv)} == "true" ]; then
           # Shuffle & sample each expression quantile separately, if optioned
           while read q n; do
-            if [ $n -eq 0 ]; then
-              touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
-              continue
-            fi
-            # Define list of genes in this expression quantile in this tissue
-            awk -v FS="\t" -v cancer=$cancer -v q=$q \
-              '{ if ($2==q && $3==cancer) print $1 }' \
-              ~{expression_quantiles} \
-            | fgrep -xf $elig_list \
-            | sort -V > $cancer.gex_q$q.genes.list || true
-            n_elig=$( cat $cancer.gex_q$q.genes.list | wc -l )
-            # Shuffle genes, restrict to eligible gene symbols, and sample desired number
-            if [ $n_elig -gt 0 ]; then
-              qseed="${seed}${q}"
-              Rscript ~{shuffle_script} \
-                --tsv-in $weights \
-                --seed "$qseed" \
-                --eligible-genes $cancer.gex_q$q.genes.list \
-                --no-zero-weights \
-                --outfile tmp.shuffled.genes.list
-              # Note: need to break this up to avoid Rcript throwing SIGPIPE error
-              head -n $n tmp.shuffled.genes.list \
-              >> gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list || true
+            if [ $n -gt 0 ]; then
+              # Define list of genes in this expression quantile in this tissue
+              awk -v FS="\t" -v cancer=$cancer -v q=$q \
+                '{ if ($2==q && $3==cancer) print $1 }' \
+                ~{expression_quantiles} \
+              | fgrep -xf $elig_list \
+              | sort -V > $cancer.gex_q$q.genes.list || true
+              n_elig=$( cat $cancer.gex_q$q.genes.list | wc -l )
+              # Shuffle genes, restrict to eligible gene symbols, and sample desired number
+              if [ $n_elig -gt 0 ]; then
+                qseed="${seed}${q}"
+                Rscript ~{shuffle_script} \
+                  --tsv-in $weights \
+                  --seed "$qseed" \
+                  --eligible-genes $cancer.gex_q$q.genes.list \
+                  --no-zero-weights \
+                  --outfile tmp.shuffled.genes.list
+                # Note: need to break this up to avoid Rcript throwing SIGPIPE error
+                head -n $n tmp.shuffled.genes.list \
+                >> gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list || true
+              else
+                touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+              fi
             else
               touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+              continue
             fi
           done < <( awk -v FS="\t" -v OFS="\t" -v cancer="$cancer" -v origin="$origin" \
                         -v context="$context" -v contig="$contig" \
@@ -441,8 +442,7 @@ task PermuteOverlaps {
                         ~{strata_gene_counts_tsv} )
         n_sampled=$( cat gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list | wc -l )
         if [ $n_expected -ne $n_sampled ]; then
-          echo "Error: number of sampled genes ($n_sampled) does not match number of expected genes ($n_expected)"
-          echo "       for permutation $i for $cancer $origin $context. Exiting."
+          echo "Error: number of sampled genes ($n_sampled) does not match number of expected genes ($n_expected) for permutation $i for $cancer $origin $context. Exiting."
           exit 1
         fi
       done < <( cut -f1-3 ~{strata_gene_counts_tsv} \
