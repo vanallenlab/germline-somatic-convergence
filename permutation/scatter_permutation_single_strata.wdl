@@ -383,7 +383,7 @@ task PermuteOverlaps {
            [ ~{defined(expression_quantile_gene_counts_tsv)} == "true" ]; then
           # Shuffle & sample each expression quantile separately, if optioned
           while read q n; do
-            if [ $n -eq 0 ] || [ $n_elig -eq 0 ]; then
+            if [ $n -eq 0 ]; then
               touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
               continue
             fi
@@ -393,23 +393,28 @@ task PermuteOverlaps {
               ~{expression_quantiles} \
             | fgrep -xf $elig_list \
             | sort -V > $cancer.gex_q$q.genes.list || true
+            n_elig=$( cat $cancer.gex_q$q.genes.list | wc -l )
             # Shuffle genes, restrict to eligible gene symbols, and sample desired number
-            qseed="${seed}${q}"
-            Rscript ~{shuffle_script} \
-              --tsv-in $weights \
-              --seed "$qseed" \
-              --eligible-genes $cancer.gex_q$q.genes.list \
-              --no-zero-weights \
-              --outfile tmp.shuffled.genes.list
-            # Note: need to break this up to avoid Rcript throwing SIGPIPE error
-            head -n $n tmp.shuffled.genes.list \
-            >> gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list || true
+            if [ $n_elig -gt 0 ]; then
+              qseed="${seed}${q}"
+              Rscript ~{shuffle_script} \
+                --tsv-in $weights \
+                --seed "$qseed" \
+                --eligible-genes $cancer.gex_q$q.genes.list \
+                --no-zero-weights \
+                --outfile tmp.shuffled.genes.list
+              # Note: need to break this up to avoid Rcript throwing SIGPIPE error
+              head -n $n tmp.shuffled.genes.list \
+              >> gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list || true
+            else
+              touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+            fi
           done < <( awk -v FS="\t" -v OFS="\t" -v cancer="$cancer" -v origin="$origin" \
                         -v context="$context" -v contig="$contig" \
                         '{ if ($1==cancer && $3==origin && $4==context && $5==contig) print $2, $6 }' \
                         ~{expression_quantile_gene_counts_tsv} )
         else
-          if [ $n_genes -gt 0 ] || [ $n_elig -eq 0 ]; then
+          if [ $n_genes -gt 0 ] && [ $n_elig -gt 0 ]; then
             # Shuffle genes, restrict to eligible gene symbols, and sample desired number
             Rscript ~{shuffle_script} \
               --tsv-in $weights \
