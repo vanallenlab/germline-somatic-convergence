@@ -371,7 +371,7 @@ task PermuteOverlaps {
         esac
 
         # Shuffle the universe of all genes, which can be subset and sampled later
-        Rscript weighted_shuffle.R \
+        Rscript ~{shuffle_script} \
           --tsv-in "$weights" \
           --seed "$seed" \
           --eligible-genes ~{eligible_gene_symbols} \
