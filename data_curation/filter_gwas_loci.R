@@ -4,7 +4,7 @@
 # Copyright (c) 2024 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
-# Code to filter GWAS catalog loci for a single cancer type
+# Filter GWAS catalog loci for a single cancer type
 
 # Set parameters
 options(scipen=1000, stringsAsFactors=F)

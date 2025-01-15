@@ -22,11 +22,12 @@ export OUTDIR=other_data/permutation_weights
 export GCATDIR=~/DesktopCol VanAllen
 export GTF=/Users/ryan/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/gencode.v47.annotation.gtf.gz
 
-# Reset output directory
-if [ -e $OUTDIR ]; then
-  rm -rf $OUTDIR
-fi
-mkdir $OUTDIR
+# # Reset output directory
+# # Note: only do this when regenerating ALL permutation data from scratch
+# if [ -e $OUTDIR ]; then
+#   rm -rf $OUTDIR
+# fi
+# mkdir $OUTDIR
 
 
 ######################

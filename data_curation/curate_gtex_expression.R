@@ -14,8 +14,8 @@ require(viridis, quietly=T)
 setwd("~/Dropbox (Partners HealthCare)/VanAllen/VALab_germline_somatic_2023")
 gtex.in <- "other_data/gtex_median_expression_gencode_filtered_SH_20231205.csv"
 elig.in <- "other_data/gencode.v47.autosomal.protein_coding.genes.list"
+pheno.pairs.in <- "other_data/negative_control_phenotype_pairs.tsv"
 outdir <- "other_data/permutation_weights"
-nc.pheno <- c("atrial_fibrilation", "inguinal_hernia", "myocardial_infarction")
 
 
 # Read GTEx data and subset to eligible genes
@@ -23,6 +23,10 @@ gtex <- read.table(gtex.in, sep=",", header=T, check.names=F)
 elig <- read.table(elig.in, header=F)[, 1]
 gtex <- gtex[which(gtex$Gene %in% elig), ]
 
+# Read negative control pairings
+nc.pairs <- read.table(pheno.pairs.in, header=F, sep="\t")
+nc.phenos <- apply(nc.pairs, 1, paste, collapse="_")
+names(nc.phenos) <- nc.pairs[, 1]
 
 # Get organ-level averages for organs with multiple biopsy sites
 gtex$Colon <- apply(gtex[, grep("Colon", colnames(gtex))], 1, mean, na.rm=T)
@@ -30,10 +34,8 @@ gtex <- gtex[, -grep("Colon - ", colnames(gtex), fixed=T)]
 gtex$Kidney <- apply(gtex[, grep("Kidney", colnames(gtex))], 1, mean, na.rm=T)
 gtex <- gtex[, -grep("Kidney - ", colnames(gtex), fixed=T)]
 
-
 # Deduplicate genes
 gtex <- gtex[!duplicated(gtex$Gene), ]
-
 
 # Divide all genes for each tissue into quintiles by expression in tissue
 # Genes with strictly zero expression in a tissue are assigned to a sixth "quintile"
@@ -70,13 +72,11 @@ t2c.map <- c("Breast - Mammary Tissue" = "breast",
              "Kidney" = "renal")
 expression.weights <- do.call("rbind", lapply(colnames(gtex)[-1], function(tissue){
   sub.df <- gtex[, c(1, which(colnames(gtex) == tissue))]
-  sub.df$cancer <- t2c.map[tissue]
+  cancer <- t2c.map[tissue]
+  sub.df$cancer <- cancer
   colnames(sub.df) <- c("gene", "weight", "cancer")
-  nc.sub.df <- as.data.frame(do.call("rbind", lapply(nc.pheno, function(pheno){
-    sub.df2 <- sub.df
-    sub.df2$cancer <- paste(t2c.map[tissue], pheno, sep="_")
-    return(sub.df2)
-  })))
+  nc.sub.df <- sub.df
+  nc.sub.df$cancer <- nc.phenos[cancer]
   return(as.data.frame(rbind(sub.df, nc.sub.df)))
 }))
 

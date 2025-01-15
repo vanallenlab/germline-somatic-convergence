@@ -85,6 +85,20 @@ while read cancer pheno; do
 done < other_data/negative_control_phenotype_pairs.tsv
 
 
+# Exclude pleiotropic genes matched for cancer type & germline context
+while read cancer pheno; do
+  for csq in coding noncoding; do
+    fgrep -xvf \
+      gene_lists/germline_${csq}/$cancer.germline.$csq.genes.list \
+      gene_lists/germline_${csq}/$pheno.germline.$csq.genes.list \
+    > gene_lists/germline_${csq}/$pheno.germline.$csq.genes.list2
+    mv \
+      gene_lists/germline_${csq}/$pheno.germline.$csq.genes.list2 \
+      gene_lists/germline_${csq}/$pheno.germline.$csq.genes.list
+  done
+done < other_data/negative_control_phenotype_pairs.tsv
+
+
 # Get table of counts
 while read cancer pheno; do
   cat gene_lists/germline_coding/$pheno.germline.coding.genes.list | wc -l

@@ -307,6 +307,10 @@ task PermuteOverlaps {
       echo -e "Starting permutation $i of ~{n_perm_per_shard}..."
 
       # Reset directory tree for each permutation
+      if [ -e perm_univ ]; then
+        rm -rf perm_univ
+      fi
+      mkdir perm_elig
       if [ -e gene_lists ]; then
         rm -rf gene_lists
       fi
@@ -328,40 +332,10 @@ task PermuteOverlaps {
       fi
 
       # Permute each strata with related but distinct seeds
-      while read cancer origin context contig n_genes; do
-
-        # Subset eligible genes to chromosome of interest
-        awk -v chrom="$contig" '{ if ($2==chrom) print $1 }' ~{gene_chrom_map_tsv} \
-        | fgrep -xf ~{eligible_gene_symbols} \
-        > "elig.$contig.genes.list"
-
-        # Define strata-specific weights
-        case "${origin}_${context}" in
-          germline_coding_gwas)
-            weights=~{coding_gwas_weights}
-            # For coding GWAS hits, by design we want to exclude genes that were
-            # already sampled from the coding germline COSMIC set
-            fgrep \
-              -xvf gene_lists/germline_coding_cosmic/$cancer.germline.coding_cosmic.genes.list \
-              "elig.$contig.genes.list" \
-            > tmp.coding_gwas.elig_genes.list || true
-            elig_list=tmp.coding_gwas.elig_genes.list
-            ;;
-          germline_noncoding)
-            weights=~{noncoding_gwas_weights}
-            elig_list="elig.$contig.genes.list"
-            ;;
-          somatic_noncoding)
-            weights=~{somatic_noncoding_weights}
-            elig_list="elig.$contig.genes.list"
-            ;;
-          *)
-            weights=~{coding_nonsyn_weights}
-            elig_list="elig.$contig.genes.list"
-            ;;
-        esac
-        n_elig=$( cat $elig_list | wc -l )
-
+      # Do this up front for all unique strata before counting
+      echo -e "\nNow permuting all eligible genes for all strata. Seeds:"
+      time while read cancer origin context; do
+    
         # Set seed string
         # Note: we take the first and last characters of each cancer, origin, 
         # and context because of total seed string length limits in our R script
@@ -378,63 +352,106 @@ task PermuteOverlaps {
         sp4="$( echo $context | cut -c1 )${context: -1}"
         sp5="$i"
         seed="${sp1}${sp2}${sp3}${sp4}${sp5}"
+        echo "$seed"
 
-        if [ ~{defined(expression_quantiles)} == "true" ] && \
-           [ ~{defined(expression_quantile_gene_counts_tsv)} == "true" ]; then
-          # Shuffle & sample each expression quantile separately, if optioned
-          while read q n; do
-            if [ $n -gt 0 ]; then
-              # Define list of genes in this expression quantile in this tissue
-              awk -v FS="\t" -v cancer=$cancer -v q=$q \
-                '{ if ($2==q && $3==cancer) print $1 }' \
-                ~{expression_quantiles} \
-              | fgrep -xf $elig_list \
-              | sort -V > $cancer.gex_q$q.genes.list || true
-              n_elig=$( cat $cancer.gex_q$q.genes.list | wc -l )
-              # Shuffle genes, restrict to eligible gene symbols, and sample desired number
-              if [ $n_elig -gt 0 ]; then
-                qseed="${seed}${q}"
-                Rscript ~{shuffle_script} \
-                  --tsv-in $weights \
-                  --seed "$qseed" \
-                  --eligible-genes $cancer.gex_q$q.genes.list \
-                  --no-zero-weights \
-                  --outfile tmp.shuffled.genes.list
-                # Note: need to break this up to avoid Rcript throwing SIGPIPE error
-                head -n $n tmp.shuffled.genes.list \
-                >> gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list || true
-              else
-                touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+        # Define strata-specific weights
+        case "${origin}_${context}" in
+          germline_coding_gwas)
+            weights=~{coding_gwas_weights}
+            ;;
+          germline_noncoding)
+            weights=~{noncoding_gwas_weights}
+            ;;
+          somatic_noncoding)
+            weights=~{somatic_noncoding_weights}
+            ;;
+          *)
+            weights=~{coding_nonsyn_weights}
+            ;;
+        esac
+
+        # Shuffle the universe of all genes, which can be subset and sampled later
+        Rscript weighted_shuffle.R \
+          --tsv-in "$weights" \
+          --seed "$qseed" \
+          --eligible-genes ~{eligible_gene_symbols} \
+          --no-zero-weights \
+          --outfile "perm_elig/$cancer.$origin.$context.shuffled.genes.list"
+
+        # Split shuffled universe by contig for convenience
+        while read contig; do
+            awk -v chrom="$contig" '{ if ($2==chrom) print $1 }' ~{gene_chrom_map_tsv} \
+            | fgrep -xf - "perm_elig/$cancer.$origin.$context.shuffled.genes.list" \
+            > "perm_elig/$cancer.$origin.$context.$contig.shuffled.genes.list"
+        done < <( cut -f4 ~{strata_gene_counts_tsv} | sort -V | uniq )
+
+      done < <( cut -f1-3 ~{strata_gene_counts_tsv} \
+                | sort -Vk1,1 -k2,2V -k3,3V | uniq )
+
+      # Sample gene lists from permuted universe for each strata
+      echo -e "\nNow sampling from permuted gene lists"
+      time while read cancer origin context contig n_genes; do
+
+        # For coding GWAS hits, by design we want to exclude genes that were
+        # already sampled from the coding germline COSMIC set
+        contig_univ="perm_elig/$cancer.$origin.$context.$contig.shuffled.genes.list"
+        case "${origin}_${context}" in
+          germline_coding_gwas)
+            fgrep \
+              -xvf gene_lists/germline_coding_cosmic/$cancer.germline.coding_cosmic.genes.list \
+              "$contig_univ" \
+            > tmp.coding_gwas.elig_genes.list || true
+            elig_list=tmp.coding_gwas.elig_genes.list
+            ;;
+          *)
+            elig_list="$contig_univ"
+            ;;
+        esac
+
+        # Sample genes from pre-shuffled universe
+        target=gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+        touch $target
+        if [ $n_genes -gt 0 ]; then
+          if [ ~{defined(expression_quantiles)} == "true" ] && \
+             [ ~{defined(expression_quantile_gene_counts_tsv)} == "true" ]; then
+            
+            # Sample each expression quantile separately, if optioned
+            while read q n; do
+              if [ $n -gt 0 ]; then
+                # Further restrict eligible genes list to this expression quantile in this tissue
+                awk -v FS="\t" -v cancer=$cancer -v q=$q \
+                  '{ if ($2==q && $3==cancer) print $1 }' \
+                  ~{expression_quantiles} \
+                | fgrep -xf - $elig_list \
+                > $cancer.gex_q$q.genes.list || true
+                n_elig=$( cat $cancer.gex_q$q.genes.list | wc -l )
+                if [ $n_elig -gt 0 ]; then
+                  head -n $n $cancer.gex_q$q.genes.list >> $target || true
+                fi
               fi
-            else
-              touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
-              continue
-            fi
-          done < <( awk -v FS="\t" -v OFS="\t" -v cancer="$cancer" -v origin="$origin" \
-                        -v context="$context" -v contig="$contig" \
-                        '{ if ($1==cancer && $3==origin && $4==context && $5==contig) print $2, $6 }' \
-                        ~{expression_quantile_gene_counts_tsv} )
-        else
-          if [ $n_genes -gt 0 ] && [ $n_elig -gt 0 ]; then
-            # Shuffle genes, restrict to eligible gene symbols, and sample desired number
-            Rscript ~{shuffle_script} \
-              --tsv-in $weights \
-              --seed "$seed" \
-              --eligible-genes $elig_list \
-              --no-zero-weights \
-              --outfile tmp.shuffled.genes.list
-            # Note: need to break this up to avoid Rcript throwing SIGPIPE error
-            head -n $n_genes tmp.shuffled.genes.list \
-            >> gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list || true
+            done < <( awk -v FS="\t" -v OFS="\t" -v cancer="$cancer" -v origin="$origin" \
+                          -v context="$context" -v contig="$contig" \
+                          '{ if ($1==cancer && $3==origin && $4==context && $5==contig) print $2, $6 }' \
+                          ~{expression_quantile_gene_counts_tsv} )
           else
-            touch gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+            head -n $n_genes $elig_list \
+            >> gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list || true
           fi
         fi
 
       done < ~{strata_gene_counts_tsv}
 
       # Consistency check: ensure number of genes sampled matches expected number
-      while read cancer origin context; do
+      echo -e "\nChecking consistency of sampled and expected gene lists"
+      time while read cancer origin context; do
+        # Ensure deduplication of sampled list
+        sort -V gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list \
+        | uniq > gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list2
+        mv \
+          gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list2 \
+          gene_lists/${origin}_${context}/$cancer.$origin.$context.genes.list
+
+        # Compare sizes of sampled and expected lists
         n_expected=$( awk \
                         -v FS="\t" -v cancer="$cancer" \
                         -v origin="$origin" -v context="$context" \
@@ -450,7 +467,8 @@ task PermuteOverlaps {
 
 
       # Find pairs per cancer type
-      while read cancer; do
+      echo -e "\nFinding convergent pairs in permuted gene lists"
+      time while read cancer; do
 
         # Merge germline coding COSMIC & coding GWAS genes
         cat \
