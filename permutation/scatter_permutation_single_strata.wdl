@@ -373,7 +373,7 @@ task PermuteOverlaps {
         # Shuffle the universe of all genes, which can be subset and sampled later
         Rscript weighted_shuffle.R \
           --tsv-in "$weights" \
-          --seed "$qseed" \
+          --seed "$seed" \
           --eligible-genes ~{eligible_gene_symbols} \
           --no-zero-weights \
           --outfile "perm_elig/$cancer.$origin.$context.shuffled.genes.list"
