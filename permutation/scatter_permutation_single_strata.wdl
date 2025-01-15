@@ -310,7 +310,7 @@ task PermuteOverlaps {
       if [ -e perm_univ ]; then
         rm -rf perm_univ
       fi
-      mkdir perm_elig
+      mkdir perm_univ
       if [ -e gene_lists ]; then
         rm -rf gene_lists
       fi
@@ -376,13 +376,13 @@ task PermuteOverlaps {
           --seed "$seed" \
           --eligible-genes ~{eligible_gene_symbols} \
           --no-zero-weights \
-          --outfile "perm_elig/$cancer.$origin.$context.shuffled.genes.list"
+          --outfile "perm_univ/$cancer.$origin.$context.shuffled.genes.list"
 
         # Split shuffled universe by contig for convenience
         while read contig; do
             awk -v chrom="$contig" '{ if ($2==chrom) print $1 }' ~{gene_chrom_map_tsv} \
-            | fgrep -xf - "perm_elig/$cancer.$origin.$context.shuffled.genes.list" \
-            > "perm_elig/$cancer.$origin.$context.$contig.shuffled.genes.list"
+            | fgrep -xf - "perm_univ/$cancer.$origin.$context.shuffled.genes.list" \
+            > "perm_univ/$cancer.$origin.$context.$contig.shuffled.genes.list"
         done < <( cut -f4 ~{strata_gene_counts_tsv} | sort -V | uniq )
 
       done < <( cut -f1-3 ~{strata_gene_counts_tsv} \
@@ -394,7 +394,7 @@ task PermuteOverlaps {
 
         # For coding GWAS hits, by design we want to exclude genes that were
         # already sampled from the coding germline COSMIC set
-        contig_univ="perm_elig/$cancer.$origin.$context.$contig.shuffled.genes.list"
+        contig_univ="perm_univ/$cancer.$origin.$context.$contig.shuffled.genes.list"
         case "${origin}_${context}" in
           germline_coding_gwas)
             fgrep \
