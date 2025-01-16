@@ -31,7 +31,7 @@ cancer.colors <- c("any" = "black",
 
 # # DEV:
 # observed.in <- "~/scratch/test.observed_counts.tsv"
-# permuted.in <- "~/scratch/perm_test.results.tsv"
+# permuted.in <- "~/scratch/perm_test.results.postprocessed.tsv"
 # out.prefix <- "~/scratch/convergence_test"
 
 # Make vector for expected column names
@@ -45,7 +45,7 @@ strata.names <- as.vector(unlist(sapply(contexts, function(germline_context){
   })
 })))
 
-# Helper function for filling in missing summary data from count dataframes
+# Helper function for filling in missing summary data from observed counts
 fill.summary.data <- function(df){
   # Make summary columns for all contexts
   for(tier in tiers){
@@ -68,68 +68,41 @@ fill.summary.data <- function(df){
   nc.phenos <- sort(unique(sapply(setdiff(df$cancer, prim.cancers), function(ps){
     paste(unlist(strsplit(ps, split="_"))[-1], collapse="_")
   })))
-  if(any(grepl("perm_idx", colnames(df)))){
-    perm.infos <- unique(df[, grep("perm_idx", colnames(df))])
-    for(info.ridx in 1:nrow(perm.infos)){
-      major.idx <- perm.infos[info.ridx, 1]
-      minor.idx <- perm.infos[info.ridx, 2]
-      sub.df <- df[which(df$perm_idx.major == major.idx
-                         & df$perm_idx.minor == minor.idx), ]
-      ac <- as.numeric(apply(sub.df[which(sub.df$cancer %in% prim.cancers), -(1:3)],
-                             2, sum, na.rm=T))
-      append.df <- as.data.frame(t(data.frame(c("any", major.idx, minor.idx, ac))))
-      colnames(append.df) <- colnames(sub.df)
-      for(pheno in nc.phenos){
-        if(length(unique(sub.df$cancer[grep(pheno, sub.df$cancer)])) > 1){
-          ac <- as.numeric(apply(sub.df[grep(pheno, sub.df$cancer), -(1:3)],
-                                 2, function(v){sum(as.numeric(v), na.rm=T)}))
-          append.df <- as.data.frame(rbind(append.df, c(paste("any", pheno, sep="_"),
-                                                        major.idx, minor.idx, ac)))
-        }
-      }
-      any.nc.idx <- intersect(grep(paste(prim.cancers, collapse="|"), sub.df$cancer),
-                              grep(paste(nc.phenos, collapse="|"), sub.df$cancer))
-      ac <- as.numeric(apply(sub.df[any.nc.idx, -(1:3)], 2,
+  ac <- as.numeric(apply(df[which(df$cancer %in% prim.cancers), -1],
+                         2, sum, na.rm=T))
+  df <- as.data.frame(rbind(df, c("any", ac)))
+  for(pheno in nc.phenos){
+    if(length(unique(df$cancer[grep(pheno, df$cancer)])) > 1){
+      ac <- as.numeric(apply(df[grep(pheno, df$cancer), -1], 2,
                              function(v){sum(as.numeric(v), na.rm=T)}))
-      append.df <- as.data.frame(rbind(append.df, c("any_negative_control",
-                                              major.idx, minor.idx, ac)))
-      rownames(append.df) <- NULL
-      df <- as.data.frame(rbind(df, append.df))
-      df[, -c(1:3)] <- apply(df[, -c(1:3)], 2, as.numeric)
+      df <- as.data.frame(rbind(df, c(paste("any", pheno, sep="_"), ac)))
     }
-  }else{
-    ac <- as.numeric(apply(df[which(df$cancer %in% prim.cancers), -1],
-                           2, sum, na.rm=T))
-    df <- as.data.frame(rbind(df, c("any", ac)))
-    for(pheno in nc.phenos){
-      if(length(unique(df$cancer[grep(pheno, df$cancer)])) > 1){
-        ac <- as.numeric(apply(df[grep(pheno, df$cancer), -1], 2,
-                               function(v){sum(as.numeric(v), na.rm=T)}))
-        df <- as.data.frame(rbind(df, c(paste("any", pheno, sep="_"), ac)))
-      }
-    }
-    any.nc.idx <- intersect(grep(paste(prim.cancers, collapse="|"), df$cancer),
-                            grep(paste(nc.phenos, collapse="|"), df$cancer))
-    ac <- as.numeric(apply(df[any.nc.idx, -1], 2,
-                           function(v){sum(as.numeric(v), na.rm=T)}))
-    df <- as.data.frame(rbind(df, c("any_negative_control", ac)))
-    df[, -1] <- apply(df[, -1], 2, as.numeric)
   }
+  any.nc.idx <- intersect(grep(paste(prim.cancers, collapse="|"), df$cancer),
+                          grep(paste(nc.phenos, collapse="|"), df$cancer))
+  ac <- as.numeric(apply(df[any.nc.idx, -1], 2,
+                         function(v){sum(as.numeric(v), na.rm=T)}))
+  df <- as.data.frame(rbind(df, c("any_negative_control", ac)))
+  df[, -1] <- apply(df[, -1], 2, as.numeric)
 
   return(df)
 }
 
-# Load observed data as data.frame
+# Load observed data as data.frame and fill missing summary counts
 obs.df <- read.table(observed.in, sep="\t", header=F, col.names=c("cancer", strata.names))
 obs.df <- fill.summary.data(obs.df)
 cancers <- sort(unique(obs.df$cancer))
+all.strata.names <- colnames(obs.df)[-1]
 
 # Load permuted data as data.frame
-perm.df <- read.table(permuted.in, sep="\t", header=F,
-                      col.names=c("cancer", "perm_idx.major", "perm_idx.minor",
-                                  strata.names))
-perm.df <- fill.summary.data(perm.df)
-all.strata.names <- colnames(obs.df)[-1]
+perm.df <- read.table(permuted.in, sep="\t", header=T)
+
+# Ensure strata match between observed and permuted inputs
+if(length(intersect(all.strata.names, colnames(perm.df))) != length(all.strata.names)){
+  cat(paste("Some strata (column names) differ between observed and permuted",
+            "inputs. Please check your input files and try running again."))
+  quit(save=F, status=1)
+}
 
 # Run one comparison for each cancer type and strata
 res <- do.call("rbind", lapply(cancers, function(cancer){

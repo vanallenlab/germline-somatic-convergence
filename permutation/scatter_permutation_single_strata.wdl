@@ -38,6 +38,7 @@ workflow RunPermutations {
     # Certain scripts supplied as inputs to avoid needing to build a special
     # Docker image specifically for this analysis
     File shuffle_script
+    File postprocess_script
     File find_pairs_script
     File analysis_script
 
@@ -82,6 +83,12 @@ workflow RunPermutations {
         mem_gb = mem_gb_per_shard,
         disk_gb = disk_gb_per_shard
     }
+    call PostprocessOverlaps as PostprocessUniform {
+      input:
+        tsv_in = PermuteUniform.results_tsv,
+        postprocess_script = postprocess_script,
+        docker = docker
+    }
 
     # One set of permutations using custom prior weights
     call PermuteOverlaps as PermuteBayesian {
@@ -104,6 +111,12 @@ workflow RunPermutations {
         n_cpu = n_cpu_per_shard,
         mem_gb = mem_gb_per_shard,
         disk_gb = disk_gb_per_shard
+    }
+    call PostprocessOverlaps as PostprocessBayesian {
+      input:
+        tsv_in = PermuteBayesian.results_tsv,
+        postprocess_script = postprocess_script,
+        docker = docker
     }
 
     # One set of permutations with tissue-specific expression quantile matching
@@ -130,6 +143,12 @@ workflow RunPermutations {
         mem_gb = mem_gb_per_shard,
         disk_gb = disk_gb_per_shard
     }
+    call PostprocessOverlaps as PostprocessExpression {
+      input:
+        tsv_in = PermuteExpression.results_tsv,
+        postprocess_script = postprocess_script,
+        docker = docker
+    }
 
     # One set of permutations combining expression quantile-matching and custom prior weights
     call PermuteOverlaps as PermuteComposite {
@@ -155,94 +174,92 @@ workflow RunPermutations {
         mem_gb = mem_gb_per_shard,
         disk_gb = disk_gb_per_shard
     }
+    call PostprocessOverlaps as PostprocessComposite {
+      input:
+        tsv_in = PermuteComposite.results_tsv,
+        postprocess_script = postprocess_script,
+        docker = docker
+    }
   }
 
-  # Concatenate results from uniformly weighted permutations
+  # Concatenate results from uniformly weighted permutations and compare to empirically observed results
   call Utils.ConcatTextFiles as ConcatUniform {
     input:
-      shards = PermuteUniform.results_tsv,
+      shards = PostprocessUniform.postprocessed_results,
       compression_command = "gzip -c",
-      output_filename = "germ_som_convergence.permutation_results.uniform_weighting.n" + total_n_perms + ".txt.gz",
+      output_filename = output_prefix + ".permutation_results.uniform_sampling.n" + total_n_perms + ".txt.gz",
       docker = docker
   }
-
-  # Compare uniformly permuted results to empirically observed results
   call ComparePermutedAndEmpirical as AnalyzeUniform {
     input:
       observed_overlaps_tsv = observed_overlaps_tsv,
       permuted_overlaps_tsv = ConcatUniform.merged_file,
       cancers = PermuteUniform.cancers[0],
       analysis_script = analysis_script,
-      output_prefix = "uniform_permutation",
+      output_prefix = output_prefix + ".uniform_sampling",
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
       disk_gb = analysis_disk_gb
   }
 
-  # Concatenate results from Bayesian weighted permutations
+  # Concatenate results from Bayesian weighted permutations and compare to empirically observed results
   call Utils.ConcatTextFiles as ConcatBayesian {
     input:
-      shards = PermuteBayesian.results_tsv,
+      shards = PostprocessBayesian.postprocessed_results,
       compression_command = "gzip -c",
-      output_filename = "germ_som_convergence.permutation_results.nonuniform_weighting.n" + total_n_perms + ".txt.gz",
+      output_filename = output_prefix + ".permutation_results.bayesian_sampling.n" + total_n_perms + ".txt.gz",
       docker = docker
   }
-
-  # Compare Bayesian permuted results to empirically observed results
   call ComparePermutedAndEmpirical as AnalyzeBayesian {
     input:
       observed_overlaps_tsv = observed_overlaps_tsv,
       permuted_overlaps_tsv = ConcatBayesian.merged_file,
       cancers = PermuteBayesian.cancers[0],
       analysis_script = analysis_script,
-      output_prefix = "nonuniform_permutation",
+      output_prefix = output_prefix + ".bayesian_sampling",
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
       disk_gb = analysis_disk_gb
   }
 
-  # Concatenate results from expression quantile-matched permutations
+  # Concatenate results from expression quantile-matched permutations and compare to empirically observed results
   call Utils.ConcatTextFiles as ConcatExpression {
     input:
-      shards = PermuteExpression.results_tsv,
+      shards = PostprocessExpression.postprocessed_results,
       compression_command = "gzip -c",
-      output_filename = "germ_som_convergence.permutation_results.expression_weighting.n" + total_n_perms + ".txt.gz",
+      output_filename = output_prefix + ".permutation_results.expression_sampling.n" + total_n_perms + ".txt.gz",
       docker = docker
   }
-
-  # Compare expression quantile-matched permuted results to empirically observed results
   call ComparePermutedAndEmpirical as AnalyzeExpression {
     input:
       observed_overlaps_tsv = observed_overlaps_tsv,
       permuted_overlaps_tsv = ConcatExpression.merged_file,
       cancers = PermuteExpression.cancers[0],
       analysis_script = analysis_script,
-      output_prefix = "expression_permutation",
+      output_prefix = output_prefix + ".expression_sampling",
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
       disk_gb = analysis_disk_gb
   }
 
-  # Concatenate results from composite weighted permutations
+  # Concatenate results from composite weighted permutations and compare to empirically observed results
   call Utils.ConcatTextFiles as ConcatComposite {
     input:
-      shards = PermuteComposite.results_tsv,
+      shards = PostprocessComposite.postprocessed_results,
       compression_command = "gzip -c",
-      output_filename = "germ_som_convergence.permutation_results.composite_weighting.n" + total_n_perms + ".txt.gz",
+      output_filename = output_prefix + ".permutation_results.composite_sampling.n" + total_n_perms + ".txt.gz",
       docker = docker
   }
-
-  # Compare composite permuted results to empirically observed results
   call ComparePermutedAndEmpirical as AnalyzeComposite {
     input:
       observed_overlaps_tsv = observed_overlaps_tsv,
       permuted_overlaps_tsv = ConcatComposite.merged_file,
       cancers = PermuteComposite.cancers[0],
       analysis_script = analysis_script,
-      output_prefix = "composite_permutation",
+      output_prefix = output_prefix + ".composite_sampling",
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
@@ -252,7 +269,8 @@ workflow RunPermutations {
   # Bundle all results as a single tarball for returning to parent workflow
   call BundleOutputs {
     input:
-      tarballs = [AnalyzeUniform.results_tarball, AnalyzeBayesian.results_tarball, AnalyzeExpression.results_tarball, AnalyzeComposite.results_tarball],
+      tarballs = [AnalyzeUniform.results_tarball, AnalyzeBayesian.results_tarball, 
+                  AnalyzeExpression.results_tarball, AnalyzeComposite.results_tarball],
       output_prefix = output_prefix,
       docker = docker
   }
@@ -515,6 +533,43 @@ task PermuteOverlaps {
   output {
     File results_tsv = outfile_name
     Array[String] cancers = read_lines("cancers.list")
+  }
+}
+
+
+task PostprocessOverlaps {
+  input {
+    File tsv_in
+    File postprocess_script
+
+    String docker
+
+    Int n_cpu = 2
+    Float? mem_gb
+    Int n_preemptible = 1
+  }
+
+  String outfile_name = basename(tsv_in, ".tsv") + ".postprocessed.tsv"
+  Int disk_gb = ceil(3 * size(tsv_in, "GiB")) + 10
+
+  command <<<
+    set -eu -o pipefail
+
+    Rscript ~{postprocess_script} ~{tsv_in} ~{outfile_name}
+  >>>
+  
+  runtime {
+    cpu: n_cpu
+    memory: select_first([mem_gb, 1.75 * n_cpu]) + " GiB"
+    disks: "local-disk " + disk_gb + " HDD"
+    bootDiskSizeGb: 10
+    docker: docker
+    preemptible: n_preemptible
+    maxRetries: 1
+  }
+
+  output {
+    File postprocessed_results = outfile_name
   }
 }
 
