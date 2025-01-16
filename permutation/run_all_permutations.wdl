@@ -14,7 +14,7 @@ import "https://raw.githubusercontent.com/vanallenlab/germline-somatic-explorati
 workflow ScatterPermutations {
   input {
     String main_output_prefix
-    
+
     # Empirically observed overlaps
     Array[File] observed_overlaps_tsvs
     Array[File] strata_gene_count_tsvs
@@ -97,7 +97,7 @@ workflow ScatterPermutations {
   call Permute.BundleOutputs as BundleOutputs {
     input:
       tarballs = RunPermutations.results,
-      output_prefix = main_output_prefix + "all_permutation_results",
+      output_prefix = main_output_prefix + ".all_permutation_results",
       docker = docker
   }
 

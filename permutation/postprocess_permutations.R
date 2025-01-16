@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Germline:Somatic Convergence Project
-# Copyright (c) 2023 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
+# Copyright (c) 2024 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
 # Postprocess a .tsv of permuted convergent pair counts
@@ -87,5 +87,4 @@ df <- as.data.frame(rbind(df, as.data.frame(append.df)))
 
 # Format permuted data and write to outfile
 df[, -c(1:3)] <- apply(df[, -c(1:3)], 2, as.numeric)
-all.strata.names <- colnames(obs.df)[-1]
 write.table(df, tsv.out, col.names=T, row.names=F, quote=F, sep="\t")
