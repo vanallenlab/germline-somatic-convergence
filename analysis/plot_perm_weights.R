@@ -1,5 +1,5 @@
-# Germline:Somatic Exploratory Pilot Analysis 2023
-# Copyright (c) 2023 Sam Hoffman, Ryan Collins, and the Van Allen Lab @ Dana-Farber Cancer Institute
+# Germline:Somatic Convergence Project
+# Copyright (c) 2023 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
 # Plot distributions of gene sampling probabilities for permutations
@@ -19,8 +19,8 @@ load.weights <- function(path){
 }
 weights <- list("coding_mu" = load.weights("other_data/permutation_weights/gene_weights.coding_nonsynonymous.tsv"),
                 "somatic_noncoding" = load.weights("other_data/permutation_weights/gene_weights.genome_territory.tsv"),
-                "coding_gwas" = load.weights("other_data/permutation_weights/gene_weights.hrc_coding_snps.tsv"),
-                "noncoding_gwas" = load.weights("other_data/permutation_weights/gene_weights.hrc_noncoding_snps.tsv"))
+                "coding_gwas" = load.weights("other_data/permutation_weights/gene_weights.composite_germline_coding.tsv"),
+                "noncoding_gwas" = load.weights("other_data/permutation_weights/gene_weights.composite_germline_noncoding.tsv"))
 
 # Plot weights
 plot.weights <- function(df, title=NULL, units="Sampling Probability", breaks=1000){
@@ -36,6 +36,6 @@ pdf("results/permutation_weight_distributions.pdf",
 par(mfrow=c(1, 4))
 plot.weights(weights[[1]], title="Coding Rare Variants")
 plot.weights(weights[[2]], title="Somatic Noncoding", breaks=500)
-plot.weights(weights[[3]], title="GWAS (Coding)")
-plot.weights(weights[[4]], title="GWAS (Noncoding)", breaks=2000)
+plot.weights(weights[[3]], title="GWAS (Coding)", breaks=200)
+plot.weights(weights[[4]], title="GWAS (Noncoding)", breaks=500)
 dev.off()

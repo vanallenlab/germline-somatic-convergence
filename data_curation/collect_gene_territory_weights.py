@@ -37,8 +37,9 @@ def main():
     with open(args.genes_list) as glin:
         for gstr in glin.readlines():
             gene = gstr.rstrip()
+            # Initialize gene with 1 nucleotide to ensure all genes get non-zero weights
             if gene not in res.keys():
-                res[gene] = 0
+                res[gene] = 1
             for reg in pbt.BedTool.from_dataframe(data[data.gene == gene]).merge():
                 res[gene] += len(reg)
     

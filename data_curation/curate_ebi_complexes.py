@@ -10,40 +10,45 @@ Parse EBI Complex Portal XML to extract lists of genes involved in the same comp
 
 import argparse
 import pandas as pd
-import xml.etree.ElementTree as ET
+import xmltodict
 from os.path import basename
 from re import sub
 
 
-def get_complex_members(xml_in):
+def get_complex_members(xml_in, eligible_genes=None):
     """
     Parse a single XML file and extract all human gene symbols
     """
 
-    tree = ET.parse(xml_in)
-
-    root = tree.getroot()
-
     members = set()
 
     # Gene symbols are stored in the interactorList element, which is a 
-    # grandchild of the root
-    ilist = [x for x in root[0].findall('./') if x.tag.endswith('interactorList')][0]
+    # grandchild of the root. Each member of the complex is a single child
+    # element of interactorList
+    with open(xml_in) as fin:
+        ilist = xmltodict.parse(fin.read())['entrySet']['entry']['interactorList']['interactor']
+        if isinstance(ilist, dict):
+            ilist = [ilist]
 
-    # Each complex interactor is a single child element of interactorList
-    for interactor in ilist:
+    for member in ilist:
 
-        # We want to extract the "names" element within each interactor
-        names = [x for x in interactor.findall('./') if x.tag.endswith('names')][0]
+        symbols = set()
+        
+        alias_infos = member['names'].get('alias', [])
+        if isinstance(alias_infos, dict):
+            alias_infos = [alias_infos]
+        for ainfo in alias_infos:
+            gene = ainfo.get('#text')
+            if ' ' in gene or any(c.islower() for c in gene):
+                continue
+            symbols.add(gene.upper())
 
-        # Each names element can hvae multiple alias sub-elements
-        # We want to extract text from each
-        for sub_e in names.iter():
-            if sub_e.tag.endswith('alias'):
-                if 'gene name' in sub_e.get('type'):
-                    gene = sub_e.text
-                    if ' ' not in gene and gene.isupper():
-                        members.add(gene)
+        # If --eligible-genes is optioned, enforce that filter here
+        if eligible_genes is not None:
+            symbols = symbols.intersection(eligible_genes)
+
+        if len(symbols) > 0:
+            members.update(symbols)
 
     return members
 
@@ -77,14 +82,25 @@ def main():
              description=__doc__,
              formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('xml', help='one or more input .xmls', metavar='xml', nargs='+')
+    parser.add_argument('-g', '--eligible-genes', help='optional list of ' +
+                        'eligible gene symbols to be included')
     parser.add_argument('--out-tsv', help='output .tsv', metavar='tsv')
     args = parser.parse_args()
+
+    # Load list of eligible genes, if optioned
+    if args.eligible_genes is not None:
+        with open(args.eligible_genes) as fin:
+            elig = set([g.rstrip() for g in fin.readlines()])
+    else:
+        elig = None
 
     # One row per complex
     res = {}
     for xml_in in args.xml:
         cpx_id = sub('\.xml$', '', sub('_human', '', basename(xml_in)))
-        res[cpx_id] = get_complex_members(xml_in)
+        cpx_members = get_complex_members(xml_in, elig)
+        if len(cpx_members) > 1:
+            res[cpx_id] = cpx_members
 
     # Format output as a two-column pd.DataFrame of complex id & members
     # Before writing to --out-tsv

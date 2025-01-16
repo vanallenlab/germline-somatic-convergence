@@ -1,5 +1,5 @@
-# Germline:Somatic Exploratory Pilot Analysis 2023
-# Copyright (c) 2023 Sam Hoffman, Ryan Collins, and the Van Allen Lab @ Dana-Farber Cancer Institute
+# Germline:Somatic Convergence Project
+# Copyright (c) 2023 Ryan Collins and the Van Allen Lab @ Dana-Farber Cancer Institute
 # Distributed under terms of the GNU GPL 2.0 (see LICENSE)
 
 # Scatter germline:somatic permutation testing over one or more sets of empirical data
@@ -8,11 +8,13 @@
 version 1.0
 
 
-import "https://raw.githubusercontent.com/vanallenlab/germline-somatic-exploration-2023/main/permutation/scatter_permutation_single_strata.wdl" as Permute
+import "https://raw.githubusercontent.com/vanallenlab/germline-somatic-exploration-2023/rlc-dec24-updates/permutation/scatter_permutation_single_strata.wdl" as Permute
 
 
 workflow ScatterPermutations {
   input {
+    String main_output_prefix
+
     # Empirically observed overlaps
     Array[File] observed_overlaps_tsvs
     Array[File] strata_gene_count_tsvs
@@ -26,16 +28,18 @@ workflow ScatterPermutations {
     File noncoding_gwas_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
+    File gene_chrom_map_tsv
     File expression_quantiles
 
     # Reference files for assessing overlap
-    File cellchat_tsv
+    File cellchat_csv
     File ppi_tsv
     File complexes_tsv
 
     # Certain scripts supplied as inputs to avoid needing to build a special
     # Docker image specifically for this analysis
     File shuffle_script
+    File postprocess_script
     File find_pairs_script
     File analysis_script
 
@@ -68,12 +72,14 @@ workflow ScatterPermutations {
       noncoding_gwas_weights = noncoding_gwas_weights,
       somatic_noncoding_weights = somatic_noncoding_weights,
       eligible_gene_symbols = eligible_gene_symbols,
+      gene_chrom_map_tsv = gene_chrom_map_tsv,
       expression_quantiles = expression_quantiles,
       expression_quantile_gene_counts_tsv = expression_quantile_gene_counts_tsvs[i],
-      cellchat_tsv = cellchat_tsv,
+      cellchat_csv = cellchat_csv,
       ppi_tsv = ppi_tsv,
       complexes_tsv = complexes_tsv,
       shuffle_script = shuffle_script,
+      postprocess_script = postprocess_script,
       find_pairs_script = find_pairs_script,
       analysis_script = analysis_script,
       n_shards = n_shards,
@@ -91,7 +97,7 @@ workflow ScatterPermutations {
   call Permute.BundleOutputs as BundleOutputs {
     input:
       tarballs = RunPermutations.results,
-      output_prefix = "all_permutation_results",
+      output_prefix = main_output_prefix + ".all_permutation_results",
       docker = docker
   }
 

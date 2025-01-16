@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2023-Present Samantha Hoffman, Ryan Collins, and the Van Allen Lab @ DFCI  
+# Copyright (c) 2023-Present Ryan Collins and the Van Allen Lab @ DFCI  
 # Distributed under terms of the GPL-2.0 License (see LICENSE)
 
 """
@@ -10,87 +10,143 @@ Parse EBI IntAct database XML to extract lists of known protein-protein interact
 
 import argparse
 import pandas as pd
-import xml.etree.ElementTree as ET
+import xmltodict
 from os.path import basename
 from re import sub
+from scipy.stats import poisson
+
+# Declare lists of interaction types with varying specificity
+direct_nofunc_itypes = ['direct interaction', 'putative self interaction', 'self interaction']
+indirect_itypes = ['physical association']
+drop_itypes = ['colocalization', 'proximity', 'association']
 
 
-def get_ppis(xml_in, return_dataframe=False):
+def get_ppis(xml_in, return_dataframe=False, eligible_genes=None, max_members=10e10):
     """
-    Parse a single XML file and extract all PPIs asserted as "direct interaction"
-    or "physical association"
+    Parse a single XML file and curate all PPIs
 
-    Returns a dict of {interaction_name : set(interactors)}
+    Returns a dict of {interaction_tier : {interaction_name : set(interactors)} }
     Alternatively returns pd.DataFrame if return_dataframe is True
     """
 
-    tree = ET.parse(xml_in)
+    # Instantiate empty dict for holding curated results
+    res = {'direct_functional' : dict(), 'direct_unknown' : dict(), 
+           'indirect' : dict()}
 
-    root = tree.getroot()
+    # Read contents from XML into dict
+    with open(xml_in) as fin:
+        entries = xmltodict.parse(fin.read())['entrySet']['entry']
+        if isinstance(entries, dict):
+            entries = [entries]
 
-    res = {}
+    # As discovered on December 5, 2024, each .xml can actually contain multiple
+    # PPIs. These are stored in the <entry> element in .xml. We need to iterate 
+    # over all of them and process each
+    for entry in entries:
+        
+        # First, build a dictionary mapping interactorRef codes to gene symbols
+        # This is necessary because the actual PPIs held in the interactionList 
+        # don't specify gene symbols, just references back to elements in interactorList
 
-    # First, build a dictionary mapping interactorRef codes to gene symbols
-    # This is necessary because the actual PPIs held in the interactionList 
-    # don't specify gene symbols, just references back to elements in interactorList
-    interactors = {}
-    ilist = [x for x in root[0].findall('./') if x.tag.endswith('interactorList')][0]
-
-    # Get gene symbols for all interactors and store in interactors dict
-    for interactor in ilist:
-
-        inumber = interactor.attrib.get('id')
-
-        symbols = set()
-
-        inames = [e for e in interactor.findall('./') if e.tag.endswith('names')][0]
-        for sub_e in inames.iter():
-            if sub_e.tag.endswith('alias'):
-                if 'gene name' in sub_e.get('type'):
-                    gene = sub_e.text
-                    if ' ' not in gene and gene.isupper():
-                        symbols.add(gene)
-
-        interactors[inumber] = symbols
-
-    # The interactions themselves are stored in the interactionList element, 
-    # which is a grandchild of the root
-    ilist = [x for x in root[0].findall('./') if x.tag.endswith('interactionList')][0]
-
-    # Each interaction is a single child "interaction" element of interactionList
-    for interaction in ilist:
-
-        # Check criteria for interaction and only keep direct interactions or
-        # physical associations
-        itype = [e for e in interaction.findall('./') if e.tag.endswith('interactionType')][0][0][0].text
-        if itype not in ['direct interaction', 'physical association']:
+        interactors = dict()
+        all_members = entry['interactorList']['interactor']
+        if isinstance(all_members, dict):
+            all_members = [all_members]
+        
+        # Always filter to human proteins only, and only continue if there are 
+        # at least two interactors specified
+        all_members = [m for m in all_members if \
+                       m['organism']['names']['shortLabel'] == 'human' and \
+                       m['interactorType']['names']['shortLabel'] == 'protein']
+        if len(all_members) < 2:
             continue
 
-        # Get interaction name
-        iname = [e for e in interaction.findall('./') if e.tag.endswith('names')][0][0].text
+        # Get gene symbols for all interactors and store in interactors dict
+        for member in all_members:
+            inumber = int(member['@id'])
+            symbols = set()
+            alias_infos = member['names'].get('alias', [])
+            if isinstance(alias_infos, dict):
+                alias_infos = [alias_infos]
+            for ainfo in alias_infos:
+                gene = ainfo.get('#text')
+                if ' ' in gene or any(c.islower() for c in gene):
+                    continue
+                symbols.add(gene.upper())
 
-        # Get participants
-        members = set()
-        participant_list = [e for e in interaction.findall('./') if e.tag.endswith('participantList')][0]
-        for participant in participant_list:
-            # Get reference number to interactor
-            try:
-                inumber = [x for x in participant.findall('./') if x.tag.endswith('interactorRef')][0].text
-                members.update(interactors[inumber])
-            except:
-                # In at least one case, there was no interactorRef specified
-                # These situations seem to be pretty rare and should probably be skipped
+            # If --eligible-genes is optioned, enforce that filter here
+            if eligible_genes is not None:
+                symbols = symbols.intersection(eligible_genes)
+
+            if len(symbols) > 0:
+                interactors[inumber] = symbols
+
+        # The interactions themselves are stored in the interactionList element, 
+        # which is a grandchild of the root. Each interaction is a single child 
+        # "interaction" element of interactionList
+        ilist = entry['interactionList']['interaction']
+        if isinstance(ilist, dict):
+            ilist = [ilist]
+        for interaction in ilist:
+
+            # Get interaction name
+            iname = interaction['names']['shortLabel']
+
+            # Assign interaction specificity tier
+            # Never keep cellular colocalization or proximity, as they are too coarse
+            itype = interaction['interactionType']['names']['shortLabel']
+            if itype in drop_itypes:
+                continue
+            elif itype in indirect_itypes:
+                itier = 'indirect'
+            elif itype in direct_nofunc_itypes:
+                itier = 'direct_unknown'
+            else:
+                itier = 'direct_functional'
+
+            # Get participants, and only retain interaction if >1 participant
+            imembers = set()
+            all_participants = interaction['participantList']['participant']
+            if isinstance(all_participants, dict):
+                all_participants = [all_participants]
+            if len(all_participants) < 2:
                 continue
 
-        # Update entry in results aggregator
-        if len(members) > 1:
-            res[iname] = members
+            for participant in all_participants:
+                try:
+                    inumber = int(participant['interactorRef'])
+                except:
+                    # In at least one case, there was no interactorRef specified and
+                    # it was not clear why, nor could I find documentation online.
+                    # These situations seem to be pretty rare and should be skipped
+                    continue
+                if inumber in interactors.keys():
+                    imembers.update(interactors[inumber])
+
+            # Filter members to eligible gene list, if optioned
+            if eligible_genes is not None:
+                imembers = imembers.intersection(eligible_genes)
+
+            # Update entry in results aggregator
+            if len(imembers) > 1 and len(imembers) <= max_members:
+                res[itier][iname] = imembers
 
     # Convert res to pd.DataFrame if optioned
     if return_dataframe:
-        for k, v in res.items():
-            res[k] = ';'.join(sorted(list(v)))
-        res = pd.DataFrame.from_dict(res, orient='index').reset_index()
+        subres_dfs = []
+        for itype, subres in res.items():
+            if len(subres) == 0:
+                continue
+            for k, v in subres.items():
+                subres[k] = ';'.join(sorted(list(v)))
+            subres_df = pd.DataFrame.from_dict(subres, orient='index').reset_index()
+            subres_df.columns = 'interaction members'.split()
+            subres_df['type'] = itype
+            subres_dfs.append(subres_df['interaction type members'.split()])
+        if len(subres_dfs) > 0:
+            res = pd.concat(subres_dfs, ignore_index=True)
+        else:
+            res = pd.DataFrame(columns='interaction type members'.split())
 
     return res
 
@@ -102,10 +158,45 @@ def format_output_tsv(res):
 
     # First, collapse all dataframes
     res_df = pd.concat(res, ignore_index=True)
-    res_df.columns = '#interaction members'.split()
+    res_df.columns = '#interaction type members'.split()
 
-    # Deduplicate by members
+    # Rank by interaction priority and deduplicate by members
+    type_order = 'direct_functional direct_unknown indirect'.split()
+    res_df['type'] = pd.Categorical(res_df['type'], type_order)
+    res_df = res_df.sort_values('type')
     return res_df.loc[~res_df.members.duplicated(), :].reset_index(drop=True)
+
+
+def filter_indirect_outliers(res_df, elig=None):
+    """
+    Excludes indirect interactions involving outlier genes
+    Outlier genes are defined as those involved in a greater number of 
+    indirect interactions than expected based on a Poisson test corrected for
+    the total number of genes
+    """
+
+    # Count number of indirect interactions per gene
+    is_indirect = res_df.type == 'indirect'
+    counts = res_df.loc[is_indirect, 'members'].\
+                    str.split(';').explode().value_counts()
+    if elig is not None:
+        zcounts = pd.Series(0, index=elig)
+        zcounts.update(counts)
+        counts = zcounts
+
+    # Compute Poisson p-value per gene
+    mean_count = counts.mean()
+    pvals = 1 - counts.apply(poisson.cdf, mu=mean_count)
+
+    # Determine outliers after Bonferroni correction
+    cutoff = 0.05 / len(pvals)
+    outliers = set(pvals.index[pvals < cutoff].values.tolist())
+
+    # Remove all indirect interactions involving outlier genes
+    def _has_outlier(members, outliers):
+        return len(set(members).intersection(outliers)) > 0
+    is_outlier = res_df.members.str.split(';').apply(_has_outlier, outliers=outliers)
+    return res_df.loc[~(is_indirect & is_outlier), :]
 
 
 def main():
@@ -116,25 +207,46 @@ def main():
              description=__doc__,
              formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('xml', help='one or more input .xmls', metavar='xml', nargs='+')
+    parser.add_argument('-g', '--eligible-genes', help='optional list of ' +
+                        'eligible gene symbols to be included')
+    parser.add_argument('-m', '--max-members', default=10e10, type=int,
+                        help='Maximum number of members to allow in a PPI')
     parser.add_argument('--out-tsv', help='output .tsv', metavar='tsv')
     args = parser.parse_args()
 
+    # Load list of eligible genes, if optioned
+    if args.eligible_genes is not None:
+        with open(args.eligible_genes) as fin:
+            elig = set([g.rstrip() for g in fin.readlines()])
+    else:
+        elig = None
+
     # Process each .xml file
     res = []
+    neg_res = []
     for xml_in in args.xml:
         cpx_id = sub('\.xml$', '', sub('_human', '', basename(xml_in)))
+        new_df = get_ppis(xml_in, return_dataframe=True, eligible_genes=elig, 
+                          max_members=args.max_members)
         if cpx_id.endswith('_negative'):
-            continue
-        res.append(get_ppis(xml_in, return_dataframe=True))
+            neg_res.append(new_df)
+        else:
+            res.append(new_df)
+
+    # Format output as a three-column pd.DataFrame of interaction id, tier, 
+    # and member gene symbols
+    res_df = format_output_tsv(res)
+    neg_df = format_output_tsv(neg_res)
 
     # Exclude any interactions listed in the "negative" XML files
     # Per EBI documentation, these are interactions that have been refuted by
     # published evidence, and it sounds like they set a pretty high bar for this
-    # TODO: need to implement this in the future
+    res_df = res_df[~res_df.members.isin(neg_df.members)]
 
-    # Format output as a two-column pd.DataFrame of interaction id & gene symbols
-    # Before writing to --out-tsv
-    res_df = format_output_tsv(res)
+    # Filter indirect interactions to exclude interactions involving outlier genes
+    res_df = filter_indirect_outliers(res_df, elig)
+
+    # Write to --out-tsv 
     res_df.to_csv(args.out_tsv, sep='\t', index=False, na_rep='NA')
 
 

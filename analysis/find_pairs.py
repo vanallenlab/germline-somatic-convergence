@@ -9,8 +9,22 @@ Identify pairs of related genes from two input gene lists
 """
 
 import argparse
+import itertools
 import pandas as pd
+from numpy import nanmin
 from sys import stdout
+
+
+# Declare constants
+ppi_tiers = {'direct_functional' : 'direct_ppi_known_function', 
+             'direct_unknown' : 'direct_ppi_unspecified_function', 
+             'indirect' : 'nonspecific_ppi'}
+criteria_tiers = {'same_gene' : 1,
+                  'ligand_receptor' : 2,
+                  'direct_ppi_known_function' : 2,
+                  'direct_ppi_unspecified_function' : 3,
+                  'nonspecific_ppi' : 4,
+                  'protein_complex' : 4}
 
 
 def load_genes(glist_in):
@@ -59,10 +73,10 @@ def find_complex_pairs(gg, sg, complexes):
 
     for cpx in complexes:
         g_hits = gg.intersection(cpx)
-        s_hits = sg.intersection(cpx).difference(g_hits)
-        if len(g_hits) > 0 and len(s_hits) > 0:
-            for g in g_hits:
-                for s in s_hits:
+        s_hits = sg.intersection(cpx)
+        for g in g_hits:
+            for s in s_hits:
+                if g != s:
                     pairs.append((g, s, ))
 
     return pairs
@@ -98,22 +112,31 @@ def format_output(identical_pairs, lr_pairs, ppi_pairs, complex_pairs, outfile,
         res = _update_pair(res, pair, 'ligand_receptor')
 
     # Update results with known protein-protein interactions
-    for pair in ppi_pairs:
-        res = _update_pair(res, pair, 'known_ppi')
+    for ppi_tier, tier_name in ppi_tiers.items():
+        for pair in ppi_pairs[ppi_tier]:
+            res = _update_pair(res, pair, tier_name)
 
     # Update results with protein complex memberships
     for pair in complex_pairs:
         res = _update_pair(res, pair, 'protein_complex')
 
+    # Annotate each pair with best tier
+    for pair in res.keys():
+        best_tier = nanmin([criteria_tiers[k] for k in res[pair]['criteria']])
+        res[pair]['tier'] = best_tier
+
     # Format results as dataframe
     res_df = pd.DataFrame.from_dict(res, orient='index').reset_index(drop=True)
-    res_df.sort_values(by=list(res_df.columns[:2]), axis=0, inplace=True)
+    if len(res_df) < 1:
+        res_df = pd.DataFrame(columns='germline_gene somatic_gene criteria tier'.split())
+    res_df.sort_values(by='tier germline_gene somatic_gene'.split(), axis=0, inplace=True)
     
     # Write dataframe to outfile
     if report_counts:
-        counts_df = pd.DataFrame([len(res_df), len(identical_pairs), 
-                                  len(lr_pairs), len(ppi_pairs), 
-                                  len(complex_pairs)]).T
+        counts_df = pd.DataFrame([(res_df.tier == 1).sum(), 
+                                  (res_df.tier == 2).sum(), 
+                                  (res_df.tier == 3).sum(),
+                                  (res_df.tier == 4).sum()]).T
         counts_df.to_csv(outfile, sep='\t', index=False, header=False, na_rep='NA')
     else:
         if len(res_df) > 0:
@@ -162,12 +185,16 @@ def main():
         lr_pairs = []
 
     # 3. Find pairs with known protein-protein interactions
+    # As of Dec 16, 2024, we now divide PPIs into three tiers of support
     if args.ppi_db is not None:
         ppi_df = pd.read_csv(args.ppi_db, sep='\t')
-        ppis = [set(x.split(';')) for x in ppi_df.iloc[:, 1].values.tolist()]
-        ppi_pairs = find_complex_pairs(gg, sg, ppis)
+        ppi_pairs = {}
+        for ppi_tier in ppi_tiers.keys():
+            ppi_members_sub = ppi_df.loc[ppi_df['type'] == ppi_tier, 'members']
+            ppis = [set(x.split(';')) for x in ppi_members_sub.values.tolist()]
+            ppi_pairs[ppi_tier] = find_complex_pairs(gg, sg, ppis)
     else:
-        ppi_pairs = []
+        ppi_pairs = {k : [] for k in ppi_tiers.keys()}
 
     # 4. Find pairs involved in the same protein complex
     if args.protein_complexes is not None:
