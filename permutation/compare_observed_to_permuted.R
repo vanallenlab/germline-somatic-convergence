@@ -22,12 +22,12 @@ strata.labels <- c("tier1" = "Tier 1 (same gene)",
                    "tier3plus" = "Tiers 1, 2, and 3",
                    "tier4" = "Tier 4 (same complex)",
                    "any" = "Any convergence criterion")
-cancer.colors <- c("any" = "black",
-                   "breast" = "#FF7A7A",
-                   "colorectal" = "#BA71D6",
-                   "lung" = "#FF7C1F",
-                   "prostate" = "#66B9E8",
-                   "renal" = "#3CB333")
+cancer.colors <- c("any" = "#404040",
+                   "breast" = "#E67F88",
+                   "colorectal" = "#C097CF",
+                   "lung" = "#E8AE6B",
+                   "prostate" = "#84BAD9",
+                   "renal" = "#65B360")
 
 # # DEV:
 # observed.in <- "~/scratch/test.observed_counts.tsv"

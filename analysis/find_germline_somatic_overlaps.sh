@@ -121,6 +121,16 @@ for germ_context in coding noncoding; do
 done
 
 
+# For the purposes of permutation *ONLY*, subset empirical pairs to those present
+# in any EBI PPI data (decision as of Jan 17 2025)
+for som_coding_def in union intersection cosmic_only intogen_only; do
+  $CODEDIR/data_curation/subset_pairs.R \
+    results/VALab_germline_somatic_2024.v2.gene_pairs.annotated.$som_coding_def.tsv \
+    other_data/gencode.v47.autosomal.protein_coding.ebi_ppi_universe.genes.list \
+    results/VALab_germline_somatic_2024.v2.gene_pairs.annotated.$som_coding_def.ebi_subset.tsv
+done
+
+
 # Run find_pairs.py for all combination of cancers and negative control phenotypes
 while read cancer nc_pheno; do
   for germ_context in coding noncoding; do

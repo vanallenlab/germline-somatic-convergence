@@ -29,7 +29,6 @@ workflow RunPermutations {
     File gene_chrom_map_tsv
     File expression_quantiles
 
-
     # Reference files for assessing overlap
     File cellchat_csv
     File ppi_tsv

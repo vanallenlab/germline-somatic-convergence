@@ -8,7 +8,7 @@
 version 1.0
 
 
-import "https://raw.githubusercontent.com/vanallenlab/germline-somatic-exploration-2023/rlc-dec24-updates/permutation/scatter_permutation_single_strata.wdl" as Permute
+import "https://raw.githubusercontent.com/vanallenlab/germline-somatic-exploration-2023/rlc-summary-figs/permutation/scatter_permutation_single_strata.wdl" as Permute
 
 
 workflow ScatterPermutations {
