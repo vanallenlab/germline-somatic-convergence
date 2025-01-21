@@ -111,13 +111,12 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
     obs.val <- as.numeric(obs.df[which(obs.df$cancer == cancer), strata])
     perm.vals <- as.numeric(perm.df[which(perm.df$cancer == cancer), strata])
     exp.mean <- mean(perm.vals, na.rm=T)
-    exp.se <- sd(perm.vals, na.rm=T) / sqrt(length(perm.vals))
     exp.ci <- quantile(perm.vals, c(0.025, 0.975))
     fold <- obs.val / exp.mean
     if(all(exp.ci == 0)){
       fold.ci <- c(0, Inf)
     }else if(min(exp.ci) <= 0){
-      fold.ci <- c(0, obs.val / max(exp.ci))
+      fold.ci <- c(obs.val / max(exp.ci), Inf)
     }else{
       fold.ci <- sort(obs.val / exp.ci)
     }
