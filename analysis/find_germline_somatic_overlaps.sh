@@ -86,7 +86,7 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
           '{ print cancer, $1, gc, $2, sc, $3, $4 }'
       done
     done
-  done \
+  done | fgrep -v "germline_gene" \
   | sort -Vk1,1 -k2,2V -k4,4V -k3,3V -k5,5V \
   | cat \
     <( echo -e "#cancer\tgermline_gene\tgermline_context\tsomatic_gene\tsomatic_context\tcriteria\ttier" ) \
@@ -197,7 +197,7 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
         | awk -v cancer=${cancer}_${nc_pheno} -v gc=$germ_context -v sc=$som_context -v OFS="\t" \
           '{ print cancer, $1, gc, $2, sc, $3, $4 }'
       done
-    done
+    done | fgrep -v "germline_gene"
   done < other_data/negative_control_phenotype_pairs.tsv \
   | sort -Vk1,1 -k2,2V -k4,4V -k3,3V -k5,5V \
   | cat \

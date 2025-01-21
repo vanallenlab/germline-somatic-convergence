@@ -455,7 +455,7 @@ task PermuteOverlaps {
         while read contig; do
             awk -v chrom="$contig" '{ if ($2==chrom) print $1 }' ~{gene_chrom_map_tsv} \
             | fgrep -xf - "perm_univ/$cancer.$origin.$context.shuffled.genes.list" \
-            > "perm_univ/$cancer.$origin.$context.$contig.shuffled.genes.list"
+            > "perm_univ/$cancer.$origin.$context.$contig.shuffled.genes.list" || true
         done < <( cut -f4 ~{strata_gene_counts_tsv} | sort -V | uniq )
 
       done < <( cut -f1-3 ~{strata_gene_counts_tsv} \
