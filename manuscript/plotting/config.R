@@ -14,16 +14,23 @@ options(stringsAsFactors=FALSE, scipen=1000)
 # Tier shapes and shading
 tier.pch <- list("tier1" = 22,
                  "tier2" = 24,
+                 "tier2plus" = 24,
                  "tier3" = 23,
-                 "tier4" = 21)
+                 "tier3plus" = 23,
+                 "tier4" = 21,
+                 "any" = 21)
 tier.shades <- list("tier1" = "dark1",
                     "tier2" = "main",
+                    "tier2plus" = "main",
                     "tier3" = "light1",
-                    "tier4" = "light2")
+                    "tier3plus" = "light1",
+                    "tier4" = "light2",
+                    "any" = "light2")
 
 # Context shading
 context.shades <- list("coding" = "dark1",
-                      "noncoding" = "light2")
+                       "any" = "main",
+                       "noncoding" = "light2")
 
 # Cancer color palettes
 pancan.colors <- list("dark2" = "#202020",
@@ -52,11 +59,11 @@ prostate.colors <- list("dark2" = "#425D6D",
                         "light1" = "#9DC8E1",
                         "light2" = "#B5D6E8")
 renal.colors <- list("dark2" = "#335A30",
-                        "dark1" = "#4C8648",
-                        "main" = "#65B360",
-                        "light1" = "#84C280",
-                        "light2" = "#A3D1A0")
-cancer.palettes <- list("pancan" = pancan.colors,
+                     "dark1" = "#4C8648",
+                     "main" = "#65B360",
+                     "light1" = "#84C280",
+                     "light2" = "#A3D1A0")
+cancer.palettes <- list("any" = pancan.colors,
                         "breast" = breast.colors,
                         "colorectal" = colorectal.colors,
                         "lung" = lung.colors,
@@ -67,7 +74,7 @@ cancer.colors <- lapply(cancer.palettes, function(p){p[["main"]]})
 # General declarative variables and variable names
 # Note that we exclude pan-cancer from the main `cancers` vector because it will
 # be treated separately in most analyses
-cancers <- setdiff(names(cancer.colors), "pancan")
+cancers <- setdiff(names(cancer.colors), "any")
 n.cancers <- length(cancers)
 origins <- c("germline", "somatic")
 contexts <- c("coding", "noncoding")

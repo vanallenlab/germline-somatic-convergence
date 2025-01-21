@@ -12,13 +12,13 @@ require(argparse)
 require(RLCtools)
 
 # Parse command line arguments and options
-parser <- ArgumentParser(description="Summarize input gene sets")
+parser <- ArgumentParser(description="Summarize convergent pairs")
 parser$add_argument("--config", metavar=".R", type="character", required=TRUE,
                     help="path to config.R file")
 parser$add_argument("--project-root", metavar="path", type="character",
                     help="root directory for all project data [default: pwd]")
 parser$add_argument("--out-prefix", metavar="path", type="character",
-                    default="./gene_set_sizes", help="file prefix for all plots")
+                    default="./pair_analysis", help="file prefix for all plots")
 args <- parser$parse_args()
 
 # # DEV arguments

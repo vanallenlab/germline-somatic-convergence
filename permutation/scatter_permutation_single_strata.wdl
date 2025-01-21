@@ -25,6 +25,11 @@ workflow RunPermutations {
     File coding_gwas_weights
     File noncoding_gwas_weights
     File somatic_noncoding_weights
+    File ppi_weights
+    File coding_nonsyn_composite_weights
+    File coding_gwas_composite_weights
+    File noncoding_gwas_composite_weights
+    File somatic_noncoding_composite_weights
     File eligible_gene_symbols
     File gene_chrom_map_tsv
     File expression_quantiles
@@ -149,14 +154,43 @@ workflow RunPermutations {
         docker = docker
     }
 
+    # One set of permutations using gene weights from PPI network connectivity
+    call PermuteOverlaps as PermutePpi {
+      input:
+        strata_gene_counts_tsv = strata_gene_counts_tsv,
+        coding_nonsyn_weights = ppi_weights,
+        coding_gwas_weights = ppi_weights,
+        noncoding_gwas_weights = ppi_weights,
+        somatic_noncoding_weights = ppi_weights,
+        eligible_gene_symbols = eligible_gene_symbols,
+        gene_chrom_map_tsv = gene_chrom_map_tsv,
+        cellchat_csv = cellchat_csv,
+        ppi_tsv = ppi_tsv,
+        complexes_tsv = complexes_tsv,
+        shuffle_script = shuffle_script,
+        find_pairs_script = find_pairs_script,
+        shard_number = shard_number,
+        n_perm_per_shard = n_perm_per_shard,
+        docker = docker,
+        n_cpu = n_cpu_per_shard,
+        mem_gb = mem_gb_per_shard,
+        disk_gb = disk_gb_per_shard
+    }
+    call PostprocessOverlaps as PostprocessPpi {
+      input:
+        tsv_in = PermutePpi.results_tsv,
+        postprocess_script = postprocess_script,
+        docker = docker
+    }
+
     # One set of permutations combining expression quantile-matching and custom prior weights
     call PermuteOverlaps as PermuteComposite {
       input:
         strata_gene_counts_tsv = strata_gene_counts_tsv,
-        coding_nonsyn_weights = coding_nonsyn_weights,
-        coding_gwas_weights = coding_gwas_weights,
-        noncoding_gwas_weights = noncoding_gwas_weights,
-        somatic_noncoding_weights = somatic_noncoding_weights,
+        coding_nonsyn_weights = coding_nonsyn_composite_weights,
+        coding_gwas_weights = coding_gwas_composite_weights,
+        noncoding_gwas_weights = noncoding_gwas_composite_weights,
+        somatic_noncoding_weights = somatic_noncoding_composite_weights,
         eligible_gene_symbols = eligible_gene_symbols,
         gene_chrom_map_tsv = gene_chrom_map_tsv,
         expression_quantiles = expression_quantiles,
@@ -244,6 +278,27 @@ workflow RunPermutations {
       disk_gb = analysis_disk_gb
   }
 
+  # Concatenate results from PPI weighted permutations and compare to empirically observed results
+  call Utils.ConcatTextFiles as ConcatPpi {
+    input:
+      shards = PostprocessPpi.postprocessed_results,
+      compression_command = "gzip -c",
+      output_filename = output_prefix + ".permutation_results.ppi_sampling.n" + total_n_perms + ".txt.gz",
+      docker = docker
+  }
+  call ComparePermutedAndEmpirical as AnalyzePpi {
+    input:
+      observed_overlaps_tsv = observed_overlaps_tsv,
+      permuted_overlaps_tsv = ConcatPpi.merged_file,
+      cancers = PermutePpi.cancers[0],
+      analysis_script = analysis_script,
+      output_prefix = output_prefix + ".ppi_sampling",
+      docker = docker,
+      n_cpu = analysis_n_cpu,
+      mem_gb = analysis_mem_gb,
+      disk_gb = analysis_disk_gb
+  }
+
   # Concatenate results from composite weighted permutations and compare to empirically observed results
   call Utils.ConcatTextFiles as ConcatComposite {
     input:
@@ -269,7 +324,8 @@ workflow RunPermutations {
   call BundleOutputs {
     input:
       tarballs = [AnalyzeUniform.results_tarball, AnalyzeBayesian.results_tarball, 
-                  AnalyzeExpression.results_tarball, AnalyzeComposite.results_tarball],
+                  AnalyzeExpression.results_tarball, AnalyzePpi.results_tarball, 
+                  AnalyzeComposite.results_tarball],
       output_prefix = output_prefix,
       docker = docker
   }

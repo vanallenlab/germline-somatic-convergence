@@ -128,10 +128,10 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
     # Plot obs/exp histogram
     highlight.color <- if(cancer %in% names(cancer.colors)){cancer.colors[cancer]}else{"gray40"}
     pdf(paste(out.prefix, cancer, strata, "pdf", sep="."),
-        height=3.5, width=3.5)
+        height=3.25, width=2.8)
     RLCtools::density.w.outliers(perm.vals, style="hist", min.bin.width=1,
                                  xlims=range(c(perm.vals, obs.val)),
-                                 x.title="Germline:Somatic Gene Pairs",
+                                 x.title="Germline:somatic gene pairs",
                                  x.title.line=0.25, x.label.units="counts",
                                  add.y.axis=FALSE, color="gray70", border="gray70",
                                  parmar=c(2.25, 0.5, 7, 0.5))
