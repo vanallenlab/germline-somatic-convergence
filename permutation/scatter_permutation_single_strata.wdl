@@ -157,7 +157,7 @@ workflow RunPermutations {
     call PermuteOverlaps as PermuteComposite {
       input:
         strata_gene_counts_tsv = strata_gene_counts_tsv,
-        coding_germline_weights = coding_nonsyn_weights,
+        coding_germline_weights = coding_germline_weights,
         coding_gwas_weights = coding_gwas_weights,
         noncoding_gwas_weights = noncoding_gwas_weights,
         somatic_coding_weights = somatic_coding_weights,
