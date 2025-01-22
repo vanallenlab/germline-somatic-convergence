@@ -291,6 +291,7 @@ task PermuteOverlaps {
     File coding_germline_weights
     File coding_gwas_weights
     File noncoding_gwas_weights
+    File somatic_coding_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
     File gene_chrom_map_tsv
@@ -383,6 +384,9 @@ task PermuteOverlaps {
             ;;
           germline_noncoding)
             weights=~{noncoding_gwas_weights}
+            ;;
+          somatic_coding)
+            weights=~{somatic_coding_weights}
             ;;
           somatic_noncoding)
             weights=~{somatic_noncoding_weights}
