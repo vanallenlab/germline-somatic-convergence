@@ -127,14 +127,21 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
     # Plot obs/exp histogram
     highlight.color <- if(cancer %in% names(cancer.colors)){cancer.colors[cancer]}else{"gray40"}
     pdf(paste(out.prefix, cancer, strata, "pdf", sep="."),
-        height=3.25, width=2.8)
+        height=3.3, width=2.8)
     RLCtools::density.w.outliers(perm.vals, style="hist", min.bin.width=1,
                                  xlims=range(c(perm.vals, obs.val)),
                                  x.title="Germline:somatic gene pairs",
                                  x.title.line=0.25, x.label.units="counts",
                                  add.y.axis=FALSE, color="gray70", border="gray70",
                                  parmar=c(2.25, 0.5, 7, 0.5))
-    text(x=ceiling(mean(perm.vals)), y=0.9*par("usr")[4], pos=4, cex=5/6, font=3,
+    if(mean(perm.vals) <= mean(par("usr")[1:2])){
+      pn.lab.at <- ceiling(mean(perm.vals))
+      pn.lab.pos <- 4
+    }else{
+      pn.lab.at <- floor(mean(perm.vals))
+      pn.lab.pos <- 2
+    }
+    text(x=pn.lab.at, y=0.8*par("usr")[4], pos=pn.lab.pos, cex=5/6, font=3,
          label="Permuted null", col="gray70")
     segments(x0=obs.val, x1=obs.val, y0=0, y1=0.5*par("usr")[4],
              col=highlight.color, lwd=6)
@@ -163,7 +170,7 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
       l1 <- "Undefined fold-change"
     }else{
       l1 <- paste(round(fold, 1), "-fold ", if(fold>=1){"enriched"}else{"depleted"},
-                  " (95% CI: ", paste(round(fold.ci, 1), collapse=" to "),
+                  " (95% CI: ", paste(round(fold.ci, 1), collapse="-"),
                   ")", sep="")
     }
     mtext(3, line=1, text=l1)

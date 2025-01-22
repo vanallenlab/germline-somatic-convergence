@@ -23,15 +23,11 @@ workflow ScatterPermutations {
 
     # Data required for each permutation
     File uniform_weights
-    File coding_nonsyn_weights
+    File coding_germline_weights
     File coding_gwas_weights
     File noncoding_gwas_weights
+    File somatic_coding_weights
     File somatic_noncoding_weights
-    File ppi_weights
-    File coding_nonsyn_composite_weights
-    File coding_gwas_composite_weights
-    File noncoding_gwas_composite_weights
-    File somatic_noncoding_composite_weights
     File eligible_gene_symbols
     File gene_chrom_map_tsv
     File expression_quantiles
@@ -72,15 +68,11 @@ workflow ScatterPermutations {
       output_prefix = overlap_prefixes[i],
       strata_gene_counts_tsv = strata_gene_count_tsvs[i],
       uniform_weights = uniform_weights,
-      coding_nonsyn_weights = coding_nonsyn_weights,
+      coding_germline_weights = coding_germline_weights,
       coding_gwas_weights = coding_gwas_weights,
       noncoding_gwas_weights = noncoding_gwas_weights,
+      somatic_coding_weights = somatic_coding_weights,
       somatic_noncoding_weights = somatic_noncoding_weights,
-      ppi_weights = ppi_weights,
-      coding_nonsyn_composite_weights = coding_nonsyn_composite_weights,
-      coding_gwas_composite_weights = coding_gwas_composite_weights,
-      noncoding_gwas_composite_weights = noncoding_gwas_composite_weights,
-      somatic_noncoding_composite_weights = somatic_noncoding_composite_weights,
       eligible_gene_symbols = eligible_gene_symbols,
       gene_chrom_map_tsv = gene_chrom_map_tsv,
       expression_quantiles = expression_quantiles,

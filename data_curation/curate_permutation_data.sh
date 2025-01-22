@@ -164,6 +164,21 @@ $CODEDIR/data_curation/curate_coding_mutation_rates.R \
   other_data/gencode.v47.autosomal.protein_coding.genes.list \
   $OUTDIR/gene_weights.coding_nonsynonymous.tsv
 
+# To reflect somatic driver genes being historically biased in PPI data, 
+# we multiply the gene-specific nonsyn. mutation rates above with the number of
+# PPIs involving each gene
+sed '1d' other_data/ebi_intact.all_interactions.tsv \
+| cut -f3 | sed 's/;/\n/g' \
+| cat other_data/gencode.v47.autosomal.protein_coding.genes.list - \
+| sort -V | uniq -c | awk -v OFS="\t" '{ print $2, $1 }' \
+| cat <( echo -e "#gene\tn_ppis" ) - \
+> $OUTDIR/gene_weights.ppi_connections.tsv
+
+$CODEDIR/data_curation/multiply_weights.R \
+  $OUTDIR/gene_weights.coding_nonsynonymous.tsv \
+  $OUTDIR/gene_weights.ppi_connections.tsv \
+  $OUTDIR/gene_weights.coding_nonsynonymous.somatic_ppi_adjustment.tsv
+
 
 #############################
 # 7. Noncoding GWAS weights #
@@ -209,34 +224,8 @@ $CODEDIR/data_curation/blend_perm_weights.R \
 $CODEDIR/data_curation/curate_gtex_expression.R
 
 
-#########################
-# 9. Curate PPI weights #
-#########################
-cat \
-  <( sed '1d' other_data/ebi_intact.all_interactions.tsv | cut -f3 ) \
-  <( sed '1d' other_data/ebi_complex_portal.all_complexes.tsv | cut -f2 ) \
-| sed 's/;/\n/g' \
-| cat other_data/gencode.v47.autosomal.protein_coding.genes.list - \
-| sort -V | uniq -c | awk -v OFS="\t" '{ print $2, $1 }' \
-| cat <( echo -e "#gene\tn_ppis" ) - \
-> $OUTDIR/gene_weights.ppi_connections.tsv
-
-
-#############################################################
-# 10. Define composite weights as P(N_PPI) X P(bayes_prior) #
-#############################################################
-for other_weight in composite_germline_coding composite_germline_noncoding \
-                    coding_nonsynonymous genome_territory; do
-  $CODEDIR/data_curation/multiply_weights.R \
-    $OUTDIR/gene_weights.$other_weight.tsv \
-    $OUTDIR/gene_weights.ppi_connections.tsv \
-    $OUTDIR/gene_weights.$other_weight.ppi_composite.tsv
-done
-
-
-
 ##################################################
-# 11. Get chromosome distributions for all genes #
+# 9. Get chromosome distributions for all genes #
 ##################################################
 # Note: this requires data processed in section 2 (above)
 
@@ -257,7 +246,7 @@ done < other_data/gencode.v47.gene_counts_per_chrom.tsv
 
 
 ###################################################
-# 12. Count of genes to be sampled for each strata #
+# 10. Count of genes to be sampled for each strata #
 ###################################################
 # Re-curate COSMIC-only and GeneBass-only gene lists to identify how many *new* 
 # germline genes are implicated by coding GWAS hits
@@ -367,7 +356,7 @@ done
 
 
 ####################################################################
-# 13. Count of genes per strata per expression quantile per tissue #
+# 11. Count of genes per strata per expression quantile per tissue #
 ####################################################################
 n_gex_bins=$( sed '1d' $OUTDIR/gene_weights.expression.cancer_specific.tsv \
               | cut -f2 | sort -nr | sed -n '1p' )
@@ -472,7 +461,7 @@ done
 
 
 ################
-# 14. Clean up #
+# 12. Clean up #
 ################
 rm -rf $WRKDIR
 
