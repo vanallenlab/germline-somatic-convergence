@@ -55,6 +55,7 @@ workflow ScatterPermutations {
     Int analysis_n_cpu = 4
     Float? analysis_mem_gb
     Int analysis_disk_gb = 30
+    String? analysis_cache_override
     
     String docker = "vanallenlab/g2c_pipeline:r_argparse"
   }
@@ -92,6 +93,7 @@ workflow ScatterPermutations {
       analysis_n_cpu = analysis_n_cpu,
       analysis_mem_gb = analysis_mem_gb,
       analysis_disk_gb = analysis_disk_gb,
+      analysis_cache_override = analysis_cache_override,
       docker = docker
     }
   }

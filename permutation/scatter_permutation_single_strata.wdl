@@ -53,6 +53,7 @@ workflow RunPermutations {
     Int analysis_n_cpu = 4
     Float? analysis_mem_gb
     Int analysis_disk_gb = 30
+    String? analysis_cache_override
     
     String docker = "vanallenlab/rlctools:latest"
   }
@@ -204,7 +205,8 @@ workflow RunPermutations {
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
-      disk_gb = analysis_disk_gb
+      disk_gb = analysis_disk_gb,
+      cache_override = analysis_cache_override
   }
 
   # Concatenate results from Bayesian weighted permutations and compare to empirically observed results
@@ -225,7 +227,8 @@ workflow RunPermutations {
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
-      disk_gb = analysis_disk_gb
+      disk_gb = analysis_disk_gb,
+      cache_override = analysis_cache_override
   }
 
   # Concatenate results from expression quantile-matched permutations and compare to empirically observed results
@@ -246,7 +249,8 @@ workflow RunPermutations {
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
-      disk_gb = analysis_disk_gb
+      disk_gb = analysis_disk_gb,
+      cache_override = analysis_cache_override
   }
 
   # Concatenate results from composite weighted permutations and compare to empirically observed results
@@ -267,7 +271,8 @@ workflow RunPermutations {
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
-      disk_gb = analysis_disk_gb
+      disk_gb = analysis_disk_gb,
+      cache_override = analysis_cache_override
   }
 
   # Bundle all results as a single tarball for returning to parent workflow
@@ -595,6 +600,7 @@ task ComparePermutedAndEmpirical {
     Int n_cpu = 4
     Float? mem_gb
     Int disk_gb = 30
+    String? cache_override
   }
 
   command <<<
