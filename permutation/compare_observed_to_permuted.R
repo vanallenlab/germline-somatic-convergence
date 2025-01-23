@@ -111,6 +111,7 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
     obs.val <- as.numeric(obs.df[which(obs.df$cancer == cancer), strata])
     perm.vals <- as.numeric(perm.df[which(perm.df$cancer == cancer), strata])
     exp.mean <- mean(perm.vals, na.rm=T)
+    exp.sd <- sd(perm.vals, na.rm=T)
     exp.ci <- quantile(perm.vals, c(0.025, 0.975))
     fold <- obs.val / exp.mean
     if(all(exp.ci == 0)){
@@ -122,7 +123,15 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
     }
     perms.gt <- length(which(perm.vals >= obs.val))
     n.perms <- length(perm.vals)
-    p <- (perms.gt + 1) / (n.perms + 1)
+    p.perm <- (perms.gt + 1) / (n.perms + 1)
+    p.pois <- ppois(obs.val, exp.mean, lower.tail=FALSE)
+    # To estimate P-value beyond the number of permutations, we use a Poisson null
+    if(perms.gt == 0){
+      p <- p.pois
+    }else{
+      # Otherwise, we take the more conservative P-value between Poisson & permuted nulls
+      p <- max(p.perm, p.pois, na.rm=T)
+    }
 
     # Plot obs/exp histogram
     highlight.color <- if(cancer %in% names(cancer.colors)){cancer.colors[cancer]}else{"gray40"}
@@ -174,11 +183,7 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
                   ")", sep="")
     }
     mtext(3, line=1, text=l1)
-    l0 <- if(p > 1/(n.perms+1)){
-      RLCtools::format.pval(p)
-    }else{
-      RLCtools::format.pval(1/n.perms, equality="<")
-    }
+    l0 <- RLCtools::format.pval(p, min.neg.log10.p=10)
     mtext(3, line=0, text=l0)
     dev.off()
 
@@ -188,11 +193,13 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
       paste(setdiff(strata.parts[[1]], "germline"), sep="_"),
       paste(setdiff(strata.parts[[2]], "somatic"), sep="_"),
       paste(strata.parts[[3]], collapse="_"),
-      obs.val, exp.mean, as.numeric(exp.ci), fold, as.numeric(fold.ci), p)
+      obs.val, exp.mean, exp.sd, as.numeric(exp.ci), fold, as.numeric(fold.ci),
+      p.perm, p.pois, p)
   })))
 }))
 colnames(res) <- c("cancer", "germline", "somatic", "criteria", "observed",
-                   "expected", "expected_lower_95pct", "expected_upper_95pct",
-                   "fold", "fold_lower_95pct", "fold_upper_95pct", "p")
+                   "expected", "expected_sd", "expected_lower_95pct",
+                   "expected_upper_95pct", "fold", "fold_lower_95pct",
+                   "fold_upper_95pct", "p_perm", "p_poisson", "p")
 write.table(res, paste(out.prefix, "all_stats.tsv", sep="."),
             col.names=T, row.names=F, sep="\t", quote=F)

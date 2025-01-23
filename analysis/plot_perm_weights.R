@@ -17,15 +17,11 @@ load.weights <- function(path){
   df$prob <- df$weight / sum(df$weight)
   return(df)
 }
-weights <- list("coding_mu" = load.weights("other_data/permutation_weights/gene_weights.coding_nonsynonymous.tsv"),
-                "somatic_noncoding" = load.weights("other_data/permutation_weights/gene_weights.genome_territory.tsv"),
-                "coding_gwas" = load.weights("other_data/permutation_weights/gene_weights.composite_germline_coding.tsv"),
+weights <- list("coding_gwas" = load.weights("other_data/permutation_weights/gene_weights.composite_germline_coding.tsv"),
                 "noncoding_gwas" = load.weights("other_data/permutation_weights/gene_weights.composite_germline_noncoding.tsv"),
-                "ppi" = load.weights("other_data/permutation_weights/gene_weights.ppi_connections.tsv"),
-                "coding_mu" = load.weights("other_data/permutation_weights/gene_weights.coding_nonsynonymous.ppi_composite.tsv"),
-                "somatic_noncoding" = load.weights("other_data/permutation_weights/gene_weights.genome_territory.ppi_composite.tsv"),
-                "coding_gwas" = load.weights("other_data/permutation_weights/gene_weights.composite_germline_coding.ppi_composite.tsv"),
-                "noncoding_gwas" = load.weights("other_data/permutation_weights/gene_weights.composite_germline_noncoding.ppi_composite.tsv"))
+                "coding_mu" = load.weights("other_data/permutation_weights/gene_weights.coding_nonsynonymous.tsv"),
+                "somatic_coding" = load.weights("other_data/permutation_weights/gene_weights.coding_nonsynonymous.somatic_ppi_adjustment.tsv"),
+                "somatic_noncoding" = load.weights("other_data/permutation_weights/gene_weights.genome_territory.tsv"))
 
 # Plot weights
 plot.weights <- function(df, title=NULL, units="Sampling probability", breaks=1000){
@@ -37,15 +33,11 @@ plot.weights <- function(df, title=NULL, units="Sampling probability", breaks=10
   clean.axis(2, title="Genes", title.line=1.5, infinite=T)
 }
 pdf("results/permutation_weight_distributions.pdf",
-    height=4.75, width=10)
-layout(matrix(c(interleave(1:5, 1:5), 10, interleave(6:9, 6:9), 10), nrow=2, byrow=T))
-plot.weights(weights[[1]], title="Coding rare variants")
-plot.weights(weights[[2]], title="Somatic noncoding", breaks=500)
-plot.weights(weights[[3]], title="GWAS (coding)", breaks=200)
-plot.weights(weights[[4]], title="GWAS (noncoding)", breaks=500)
-plot.weights(weights[[5]], title="PPI connectivity", breaks=200)
-plot.weights(weights[[6]], title="Rare coding X PPI")
-plot.weights(weights[[7]], title="Som. noncod. X PPI", breaks=400)
-plot.weights(weights[[8]], title="GWAS coding X PPI", breaks=400)
-plot.weights(weights[[9]], title="GWAS nonc. X PPI", breaks=500)
+    height=3, width=10)
+par(mfrow=c(1, 5))
+plot.weights(weights[[1]], title="GWAS (coding)", breaks=200)
+plot.weights(weights[[2]], title="GWAS (noncoding)", breaks=500)
+plot.weights(weights[[3]], title="Coding rare variants", breaks=500)
+plot.weights(weights[[4]], title="Somatic coding", breaks=1000)
+plot.weights(weights[[5]], title="Somatic noncoding", breaks=500)
 dev.off()

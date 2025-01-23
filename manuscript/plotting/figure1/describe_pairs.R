@@ -9,6 +9,7 @@
 # Set parameters and load libraries
 options(scipen=1000, stringsAsFactors=FALSE)
 require(argparse)
+require(plotrix)
 require(RLCtools)
 
 # Parse command line arguments and options
@@ -36,6 +37,9 @@ if(is.null(args$project_root)){
 # Source config.R
 source(args$config)
 
+# Rename tiers to exclude tier+ designations
+tier.names <- setdiff(names(tier.pch), c("tier2plus", "tier3plus", "any"))
+
 # Read pairs
 pairs <- read.table(paste(args$project_root, "results/VALab_germline_somatic_2024.v2.gene_pairs.annotated.union.tsv", sep="/"),
                     header=T, sep="\t", comment.char="", check.names=F)
@@ -57,8 +61,8 @@ bar.dat <- as.data.frame(do.call("rbind", lapply(contexts, function(germ.context
   })))
   as.data.frame(cbind(rep(germ.context, nrow(sub.df)), sub.df))
 })))
-colnames(bar.dat) <- c("germline", "somatic", "cancer", names(tier.pch))
-bar.dat[, names(tier.pch)] <- apply(bar.dat[, names(tier.pch)], 2, as.numeric)
+colnames(bar.dat) <- c("germline", "somatic", "cancer", tier.names)
+bar.dat[, tier.names] <- apply(bar.dat[, tier.names], 2, as.numeric)
 bar.dat$total <- apply(bar.dat[, grep("^tier", colnames(bar.dat))], 1, sum)
 
 # Barplot of convergent pairs; grouped by context; colored by cancer; shaded by tier
@@ -143,3 +147,61 @@ pdf(paste(args$out_prefix, "hub_genes.germline.pdf", sep="."),
     height=hub.height, width=total.hub.width*som.hub.prop)
 plot.hubs(germline.hubs, "germline")
 dev.off()
+
+# Read unpaired gene lists to compute distributions of # of pairs per gene
+gsets <- lapply(origins, function(origin){
+  x1 <- lapply(contexts, function(context){
+    x2 <- lapply(cancers, function(cancer){
+      read.table(paste(args$project_root, "/gene_lists/", origin, "_", context, "/",
+                       cancer, ".", origin, ".", context, ".genes.list", sep=""),
+                 header=F)[, 1]
+    })
+    names(x2) <- cancers
+    return(x2)
+  })
+  names(x1) <- contexts
+  return(x1)
+})
+names(gsets) <- origins
+
+# Count total number of unique germline|somatic genes (any context/cancer)
+cat("Total number of unique germline genes:\n")
+cat(length(unique(unlist(unlist(gsets[["germline"]])))))
+cat("\nTotal number of unique somatic genes:\n")
+cat(length(unique(unlist(unlist(gsets[["somatic"]])))))
+cat("\n")
+
+# Compute distribution of pairs per germline and somatic gene by context
+sapply(origins, function(origin){
+  sapply(c("any", contexts), function(context){
+    if(context == "any"){
+      g.list <- unique(unlist(unlist(gsets[[origin]])))
+    }else{
+      g.list <- unique(unlist(gsets[[origin]][[context]]))
+    }
+    g.counts <- sapply(g.list, function(g){
+      if(context == "any"){
+        sum(pairs[, paste(origin, "gene", sep="_")] == g)
+      }else{
+        sum(pairs[, paste(origin, "gene", sep="_")] == g
+            & pairs[, paste(origin, "context", sep="_")] == context)
+      }
+    })
+    g.tab <- c(sapply(0:(hub.cutoff-1), function(k){
+      length(which(g.counts == k))
+    }),
+    length(which(g.counts >= hub.cutoff)))
+    g.frac <- g.tab / sum(g.tab)
+    names(g.frac) <- 0:hub.cutoff
+    cat(paste("Proportion of genes with k pairs for", origin, context, "\n"))
+    cat(g.frac)
+    cat("\n\n")
+    pdf(paste(args$out_prefix, "pairs_per_gene", origin, context, "pie.pdf", sep="."),
+        height=0.55, width=0.55)
+    par(mar=rep(0.1, 4))
+    pie(g.frac, labels=NA, clockwise=TRUE, init.angle=180, radius=1,
+        border=c("black", rep(NA, 4)), col=c("white", greyscale.palette(5)[5:2]))
+    draw.circle(x=0, y=0, radius=1)
+    dev.off()
+  })
+})
