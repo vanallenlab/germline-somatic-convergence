@@ -136,13 +136,13 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
     # Plot obs/exp histogram
     highlight.color <- if(cancer %in% names(cancer.colors)){cancer.colors[cancer]}else{"gray40"}
     pdf(paste(out.prefix, cancer, strata, "pdf", sep="."),
-        height=3.3, width=2.8)
+        height=2.9, width=2.3)
     RLCtools::density.w.outliers(perm.vals, style="hist", min.bin.width=1,
                                  xlims=range(c(perm.vals, obs.val)),
                                  x.title="Germline:somatic gene pairs",
-                                 x.title.line=0.25, x.label.units="counts",
+                                 x.title.line=0, x.label.units="counts",
                                  add.y.axis=FALSE, color="gray70", border="gray70",
-                                 parmar=c(2.25, 0.5, 7, 0.5))
+                                 parmar=c(2, 0.5, 6, 0.5))
     if(mean(perm.vals) <= mean(par("usr")[1:2])){
       pn.lab.at <- ceiling(mean(perm.vals))
       pn.lab.pos <- 4
@@ -162,19 +162,19 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
                            function(s){unlist(strsplit(s, split="_"))})
     if(grepl("_", cancer)){
       cparts <- unlist(strsplit(cancer, split="_"))
-      l6 <- paste(cparts[1], "cancer vs.", paste(cparts[-1], collapse=" "))
+      l6 <- paste(cparts[1], "vs.", paste(cparts[-1], collapse=" "))
     }else{
-      l6 <- paste(cancer, "Cancer")
+      l6 <- paste(cancer, "ancer")
     }
-    mtext(3, line=6, text=title.case(l6, case="sentence"))
+    mtext(3, line=6-0.9, text=title.case(l6, case="sentence"), cex=5/6)
     l5 <- sub("any", "all", paste(c(strata.parts[[1]][2:1], "Variants"), collapse=" "))
-    mtext(3, line=5, text=title.case(l5, case="sentence"))
+    mtext(3, line=5-0.75, text=title.case(l5, case="sentence"), cex=5/6)
     l4 <- sub("any", "all", paste(c(strata.parts[[2]][2:1], "Alterations"), collapse=" "))
-    mtext(3, line=4, text=title.case(l4, case="sentence"))
+    mtext(3, line=4-0.6, text=title.case(l4, case="sentence"), cex=5/6)
     l3 <- strata.labels[strata.parts[[3]][1]]
-    mtext(3, line=3, text=title.case(l3, case="sentence"))
+    mtext(3, line=3-0.45, text=title.case(l3, case="sentence"), cex=5/6)
     l2 <- paste(obs.val, "observed vs.", round(exp.mean, 1), "expected")
-    mtext(3, line=2, text=l2)
+    mtext(3, line=2-0.3, text=l2, cex=5/6)
     if(is.na(fold) | is.infinite(fold)){
       l1 <- "Undefined fold-change"
     }else{
@@ -182,9 +182,9 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
                   " (95% CI: ", paste(round(fold.ci, 1), collapse="-"),
                   ")", sep="")
     }
-    mtext(3, line=1, text=l1)
+    mtext(3, line=1-0.15, text=l1, cex=5/6)
     l0 <- RLCtools::format.pval(p, min.neg.log10.p=10)
-    mtext(3, line=0, text=l0)
+    mtext(3, line=0, text=l0, cex=5/6)
     dev.off()
 
     # Return permutation res
