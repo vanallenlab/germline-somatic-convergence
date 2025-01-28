@@ -164,7 +164,7 @@ res <- do.call("rbind", lapply(cancers, function(cancer){
       cparts <- unlist(strsplit(cancer, split="_"))
       l6 <- paste(cparts[1], "vs.", paste(cparts[-1], collapse=" "))
     }else{
-      l6 <- paste(cancer, "ancer")
+      l6 <- paste(cancer, "cancer")
     }
     mtext(3, line=6-0.9, text=title.case(l6, case="sentence"), cex=5/6)
     l5 <- sub("any", "all", paste(c(strata.parts[[1]][2:1], "Variants"), collapse=" "))

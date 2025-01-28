@@ -23,8 +23,15 @@ $CODEDIR/manuscript/plotting/figure1/describe_pairs.R \
   --config $CONFIG \
   --out-prefix $OUTDIR/pair_analysis
 
-# Plot GSEA results
-# TODO: implement this
+# Summarize raw results from permutation tests across different null models
+# (3/4 of these will be for supplement, but good to show that composite method 
+#  is best calibrated)
+for model in uniform bayesian expression composite; do
+  $CODEDIR/manuscript/plotting/figure1/summarize_permutation_stats.R \
+    --config $CONFIG \
+    --model $model \
+    --out-prefix $OUTDIR/perm_stats
+done
 
 # Switch back to original execution directory
 # (Only necessary if this script is called directly from the command line)
