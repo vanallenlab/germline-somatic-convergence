@@ -86,7 +86,7 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
           '{ print cancer, $1, gc, $2, sc, $3, $4 }'
       done
     done
-  done \
+  done | fgrep -v "germline_gene" \
   | sort -Vk1,1 -k2,2V -k4,4V -k3,3V -k5,5V \
   | cat \
     <( echo -e "#cancer\tgermline_gene\tgermline_context\tsomatic_gene\tsomatic_context\tcriteria\ttier" ) \
@@ -95,30 +95,30 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
 done
 
 
-# Print summary of results for tables in slides
-res_tsv=results/VALab_germline_somatic_2024.v2.gene_pairs.annotated.union.tsv
-for germ_context in coding noncoding; do
-  for som_context in coding noncoding; do
-    echo -e "\n\n\n==========\nGermline: $germ_context\nSomatic: $som_context\n=========="
-    awk -v gc=$germ_context -v sc=$som_context \
-      '{ if ($3==gc && $5==sc) print }' $res_tsv | wc -l \
-    | awk '{ print "Total pairs:", $1, "pairs\n" }'
-    for tier in 1 2 3; do
-      awk -v gc=$germ_context -v sc=$som_context -v tr=$tier \
-        '{ if ($3==gc && $5==sc && $NF==tr) print }' $res_tsv | wc -l \
-      | awk -v tr=$tier '{ print "\n* Tier", tr, ":", $1, "pairs" }'
-      if [ $tier == 1 ]; then
-        awk -v gc=$germ_context -v sc=$som_context -v tr=$tier -v OFS="\t" \
-          '{ if ($3==gc && $5==sc && $NF==tr) print $1, $2 }' $res_tsv \
-        | sort -Vk1,1 -k2,2V
-      else
-        awk -v gc=$germ_context -v sc=$som_context -v tr=$tier -v OFS="\t" \
-          '{ if ($3==gc && $5==sc && $NF==tr) print $1, $2, $4 }' $res_tsv \
-        | sort -Vk1,1 -k2,2V -k3,3V
-      fi
-    done
-  done
-done
+# # Print summary of results for tables in slides
+# res_tsv=results/VALab_germline_somatic_2024.v2.gene_pairs.annotated.union.tsv
+# for germ_context in coding noncoding; do
+#   for som_context in coding noncoding; do
+#     echo -e "\n\n\n==========\nGermline: $germ_context\nSomatic: $som_context\n=========="
+#     awk -v gc=$germ_context -v sc=$som_context \
+#       '{ if ($3==gc && $5==sc) print }' $res_tsv | wc -l \
+#     | awk '{ print "Total pairs:", $1, "pairs\n" }'
+#     for tier in 1 2 3; do
+#       awk -v gc=$germ_context -v sc=$som_context -v tr=$tier \
+#         '{ if ($3==gc && $5==sc && $NF==tr) print }' $res_tsv | wc -l \
+#       | awk -v tr=$tier '{ print "\n* Tier", tr, ":", $1, "pairs" }'
+#       if [ $tier == 1 ]; then
+#         awk -v gc=$germ_context -v sc=$som_context -v tr=$tier -v OFS="\t" \
+#           '{ if ($3==gc && $5==sc && $NF==tr) print $1, $2 }' $res_tsv \
+#         | sort -Vk1,1 -k2,2V
+#       else
+#         awk -v gc=$germ_context -v sc=$som_context -v tr=$tier -v OFS="\t" \
+#           '{ if ($3==gc && $5==sc && $NF==tr) print $1, $2, $4 }' $res_tsv \
+#         | sort -Vk1,1 -k2,2V -k3,3V
+#       fi
+#     done
+#   done
+# done
 
 
 # Run find_pairs.py for all combination of cancers and negative control phenotypes
@@ -197,7 +197,7 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
         | awk -v cancer=${cancer}_${nc_pheno} -v gc=$germ_context -v sc=$som_context -v OFS="\t" \
           '{ print cancer, $1, gc, $2, sc, $3, $4 }'
       done
-    done
+    done | fgrep -v "germline_gene"
   done < other_data/negative_control_phenotype_pairs.tsv \
   | sort -Vk1,1 -k2,2V -k4,4V -k3,3V -k5,5V \
   | cat \

@@ -32,3 +32,11 @@ $CODEDIR/data_curation/curate_ebi_complexes.py \
   --out-tsv other_data/ebi_complex_portal.all_complexes.tsv \
   $complex_data/*.xml
 
+
+# Write list of genes appearing in at least one PPI or complex
+# We can use these as a strict universe set for permutations
+cat \
+  <( sed '1d' other_data/ebi_intact.all_interactions.tsv | cut -f3 ) \
+  <( sed '1d' other_data/ebi_complex_portal.all_complexes.tsv | cut -f2 ) \
+| sed 's/;/\n/g' | sort -V | uniq \
+> other_data/gencode.v47.autosomal.protein_coding.ebi_ppi_universe.genes.list

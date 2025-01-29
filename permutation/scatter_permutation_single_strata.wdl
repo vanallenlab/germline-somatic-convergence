@@ -21,14 +21,14 @@ workflow RunPermutations {
     # Data required for each permutation
     File strata_gene_counts_tsv
     File uniform_weights
-    File coding_nonsyn_weights
+    File coding_germline_weights
     File coding_gwas_weights
     File noncoding_gwas_weights
+    File somatic_coding_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
     File gene_chrom_map_tsv
     File expression_quantiles
-
 
     # Reference files for assessing overlap
     File cellchat_csv
@@ -53,6 +53,7 @@ workflow RunPermutations {
     Int analysis_n_cpu = 4
     Float? analysis_mem_gb
     Int analysis_disk_gb = 30
+    String? analysis_cache_override
     
     String docker = "vanallenlab/rlctools:latest"
   }
@@ -65,9 +66,10 @@ workflow RunPermutations {
     call PermuteOverlaps as PermuteUniform {
       input:
         strata_gene_counts_tsv = strata_gene_counts_tsv,
-        coding_nonsyn_weights = uniform_weights,
+        coding_germline_weights = uniform_weights,
         coding_gwas_weights = uniform_weights,
         noncoding_gwas_weights = uniform_weights,
+        somatic_coding_weights = uniform_weights,
         somatic_noncoding_weights = uniform_weights,
         eligible_gene_symbols = eligible_gene_symbols,
         gene_chrom_map_tsv = gene_chrom_map_tsv,
@@ -94,9 +96,10 @@ workflow RunPermutations {
     call PermuteOverlaps as PermuteBayesian {
       input:
         strata_gene_counts_tsv = strata_gene_counts_tsv,
-        coding_nonsyn_weights = coding_nonsyn_weights,
+        coding_germline_weights = coding_germline_weights,
         coding_gwas_weights = coding_gwas_weights,
         noncoding_gwas_weights = noncoding_gwas_weights,
+        somatic_coding_weights = somatic_coding_weights,
         somatic_noncoding_weights = somatic_noncoding_weights,
         eligible_gene_symbols = eligible_gene_symbols,
         gene_chrom_map_tsv = gene_chrom_map_tsv,
@@ -123,9 +126,10 @@ workflow RunPermutations {
     call PermuteOverlaps as PermuteExpression {
       input:
         strata_gene_counts_tsv = strata_gene_counts_tsv,
-        coding_nonsyn_weights = uniform_weights,
+        coding_germline_weights = uniform_weights,
         coding_gwas_weights = uniform_weights,
         noncoding_gwas_weights = uniform_weights,
+        somatic_coding_weights = uniform_weights,
         somatic_noncoding_weights = uniform_weights,
         eligible_gene_symbols = eligible_gene_symbols,
         gene_chrom_map_tsv = gene_chrom_map_tsv,
@@ -154,9 +158,10 @@ workflow RunPermutations {
     call PermuteOverlaps as PermuteComposite {
       input:
         strata_gene_counts_tsv = strata_gene_counts_tsv,
-        coding_nonsyn_weights = coding_nonsyn_weights,
+        coding_germline_weights = coding_germline_weights,
         coding_gwas_weights = coding_gwas_weights,
         noncoding_gwas_weights = noncoding_gwas_weights,
+        somatic_coding_weights = somatic_coding_weights,
         somatic_noncoding_weights = somatic_noncoding_weights,
         eligible_gene_symbols = eligible_gene_symbols,
         gene_chrom_map_tsv = gene_chrom_map_tsv,
@@ -200,7 +205,8 @@ workflow RunPermutations {
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
-      disk_gb = analysis_disk_gb
+      disk_gb = analysis_disk_gb,
+      cache_override = analysis_cache_override
   }
 
   # Concatenate results from Bayesian weighted permutations and compare to empirically observed results
@@ -221,7 +227,8 @@ workflow RunPermutations {
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
-      disk_gb = analysis_disk_gb
+      disk_gb = analysis_disk_gb,
+      cache_override = analysis_cache_override
   }
 
   # Concatenate results from expression quantile-matched permutations and compare to empirically observed results
@@ -242,7 +249,8 @@ workflow RunPermutations {
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
-      disk_gb = analysis_disk_gb
+      disk_gb = analysis_disk_gb,
+      cache_override = analysis_cache_override
   }
 
   # Concatenate results from composite weighted permutations and compare to empirically observed results
@@ -263,7 +271,8 @@ workflow RunPermutations {
       docker = docker,
       n_cpu = analysis_n_cpu,
       mem_gb = analysis_mem_gb,
-      disk_gb = analysis_disk_gb
+      disk_gb = analysis_disk_gb,
+      cache_override = analysis_cache_override
   }
 
   # Bundle all results as a single tarball for returning to parent workflow
@@ -284,9 +293,10 @@ workflow RunPermutations {
 task PermuteOverlaps {
   input {
     File strata_gene_counts_tsv
-    File coding_nonsyn_weights
+    File coding_germline_weights
     File coding_gwas_weights
     File noncoding_gwas_weights
+    File somatic_coding_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
     File gene_chrom_map_tsv
@@ -380,11 +390,14 @@ task PermuteOverlaps {
           germline_noncoding)
             weights=~{noncoding_gwas_weights}
             ;;
+          somatic_coding)
+            weights=~{somatic_coding_weights}
+            ;;
           somatic_noncoding)
             weights=~{somatic_noncoding_weights}
             ;;
           *)
-            weights=~{coding_nonsyn_weights}
+            weights=~{coding_germline_weights}
             ;;
         esac
 
@@ -400,7 +413,7 @@ task PermuteOverlaps {
         while read contig; do
             awk -v chrom="$contig" '{ if ($2==chrom) print $1 }' ~{gene_chrom_map_tsv} \
             | fgrep -xf - "perm_univ/$cancer.$origin.$context.shuffled.genes.list" \
-            > "perm_univ/$cancer.$origin.$context.$contig.shuffled.genes.list"
+            > "perm_univ/$cancer.$origin.$context.$contig.shuffled.genes.list" || true
         done < <( cut -f4 ~{strata_gene_counts_tsv} | sort -V | uniq )
 
       done < <( cut -f1-3 ~{strata_gene_counts_tsv} \
@@ -587,6 +600,7 @@ task ComparePermutedAndEmpirical {
     Int n_cpu = 4
     Float? mem_gb
     Int disk_gb = 30
+    String? cache_override
   }
 
   command <<<

@@ -8,7 +8,7 @@
 version 1.0
 
 
-import "https://raw.githubusercontent.com/vanallenlab/germline-somatic-exploration-2023/rlc-dec24-updates/permutation/scatter_permutation_single_strata.wdl" as Permute
+import "https://raw.githubusercontent.com/vanallenlab/germline-somatic-exploration-2023/rlc-summary-figs/permutation/scatter_permutation_single_strata.wdl" as Permute
 
 
 workflow ScatterPermutations {
@@ -23,9 +23,10 @@ workflow ScatterPermutations {
 
     # Data required for each permutation
     File uniform_weights
-    File coding_nonsyn_weights
+    File coding_germline_weights
     File coding_gwas_weights
     File noncoding_gwas_weights
+    File somatic_coding_weights
     File somatic_noncoding_weights
     File eligible_gene_symbols
     File gene_chrom_map_tsv
@@ -54,6 +55,7 @@ workflow ScatterPermutations {
     Int analysis_n_cpu = 4
     Float? analysis_mem_gb
     Int analysis_disk_gb = 30
+    String? analysis_cache_override
     
     String docker = "vanallenlab/g2c_pipeline:r_argparse"
   }
@@ -67,9 +69,10 @@ workflow ScatterPermutations {
       output_prefix = overlap_prefixes[i],
       strata_gene_counts_tsv = strata_gene_count_tsvs[i],
       uniform_weights = uniform_weights,
-      coding_nonsyn_weights = coding_nonsyn_weights,
+      coding_germline_weights = coding_germline_weights,
       coding_gwas_weights = coding_gwas_weights,
       noncoding_gwas_weights = noncoding_gwas_weights,
+      somatic_coding_weights = somatic_coding_weights,
       somatic_noncoding_weights = somatic_noncoding_weights,
       eligible_gene_symbols = eligible_gene_symbols,
       gene_chrom_map_tsv = gene_chrom_map_tsv,
@@ -90,6 +93,7 @@ workflow ScatterPermutations {
       analysis_n_cpu = analysis_n_cpu,
       analysis_mem_gb = analysis_mem_gb,
       analysis_disk_gb = analysis_disk_gb,
+      analysis_cache_override = analysis_cache_override,
       docker = docker
     }
   }

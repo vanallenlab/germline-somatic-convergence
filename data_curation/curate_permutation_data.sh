@@ -19,7 +19,7 @@ export CODEDIR=$LOCDIR/germline-somatic-convergence
 export GCATDIR=$LOCDIR/data/full_gwas_catalog
 export WRKDIR=`mktemp -d`
 export OUTDIR=other_data/permutation_weights
-export GCATDIR=~/DesktopCol VanAllen
+export GCATDIR=~/Desktop/Collins/VanAllen/germline_somatic_convergence/data/full_gwas_catalog/
 export GTF=/Users/ryan/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/gencode.v47.annotation.gtf.gz
 
 # # Reset output directory
@@ -164,6 +164,21 @@ $CODEDIR/data_curation/curate_coding_mutation_rates.R \
   other_data/gencode.v47.autosomal.protein_coding.genes.list \
   $OUTDIR/gene_weights.coding_nonsynonymous.tsv
 
+# To reflect somatic driver genes being historically biased in PPI data, 
+# we multiply the gene-specific nonsyn. mutation rates above with the number of
+# PPIs involving each gene
+sed '1d' other_data/ebi_intact.all_interactions.tsv \
+| cut -f3 | sed 's/;/\n/g' \
+| cat other_data/gencode.v47.autosomal.protein_coding.genes.list - \
+| sort -V | uniq -c | awk -v OFS="\t" '{ print $2, $1 }' \
+| cat <( echo -e "#gene\tn_ppis" ) - \
+> $OUTDIR/gene_weights.ppi_connections.tsv
+
+$CODEDIR/data_curation/multiply_weights.R \
+  $OUTDIR/gene_weights.coding_nonsynonymous.tsv \
+  $OUTDIR/gene_weights.ppi_connections.tsv \
+  $OUTDIR/gene_weights.coding_nonsynonymous.somatic_ppi_adjustment.tsv
+
 
 #############################
 # 7. Noncoding GWAS weights #
@@ -257,47 +272,54 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
 
       # COSMIC germline coding
       fgrep -xf $WRKDIR/gencode.v47.gene_chromosome_map.$contig.tsv \
-        $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list | wc -l \
+        $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
+      | fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list | wc -l \
       | paste <( echo -e "$cancer\tgermline\tcoding_cosmic\t$contig" ) -
 
       # Other germline coding contributed by GWAS (after excluding COSMIC)
-      idx=$( head -n1 other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
+      idx=$( head -n1 other_data/gwas_catalog/$cancer.gwas_catalog.01_17_25.filtered.annotated.tsv \
              | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
       awk -v FS="\t" -v idx=$idx '{ if ($NF=="CDS") print $idx }' \
-        other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
+        other_data/gwas_catalog/$cancer.gwas_catalog.01_17_25.filtered.annotated.tsv \
       | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
       | fgrep -xf $WRKDIR/gencode.v47.gene_chromosome_map.$contig.tsv \
       | fgrep -xvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
+      | fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list \
       | wc -l | paste <( echo -e "$cancer\tgermline\tcoding_gwas\t$contig" ) -
 
       # GeneBass coding - negative controls
       fgrep -xf $WRKDIR/gencode.v47.gene_chromosome_map.$contig.tsv \
-        $WRKDIR/genebass_tmp/germline_coding/$nc_pheno.germline.coding.genes.list | wc -l \
+        $WRKDIR/genebass_tmp/germline_coding/$nc_pheno.germline.coding.genes.list \
+      | fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list | wc -l \
       | paste <( echo -e "${cancer}_${nc_pheno}\tgermline\tcoding_cosmic\t$contig" ) -
 
       # Other germline coding contributed by GWAS (after excluding GeneBass) - negative controls
-      idx=$( head -n1 other_data/gwas_catalog/$nc_pheno.gwas_catalog.01_13_25.filtered.annotated.tsv \
+      idx=$( head -n1 other_data/gwas_catalog/$nc_pheno.gwas_catalog.01_17_25.filtered.annotated.tsv \
              | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
       awk -v FS="\t" -v idx=$idx '{ if ($NF=="CDS") print $idx }' \
-        other_data/gwas_catalog/$nc_pheno.gwas_catalog.01_13_25.filtered.annotated.tsv \
+        other_data/gwas_catalog/$nc_pheno.gwas_catalog.01_17_25.filtered.annotated.tsv \
       | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
       | fgrep -xf $WRKDIR/gencode.v47.gene_chromosome_map.$contig.tsv \
+      | fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list \
       | fgrep -xvf $WRKDIR/genebass_tmp/germline_coding/$nc_pheno.germline.coding.genes.list \
       | wc -l | paste <( echo -e "${cancer}_${nc_pheno}\tgermline\tcoding_gwas\t$contig" ) -
 
       # Germline & somatic noncoding
       for origin in germline somatic; do
         fgrep -xf $WRKDIR/gencode.v47.gene_chromosome_map.$contig.tsv \
-          gene_lists/${origin}_noncoding/$cancer.$origin.noncoding.genes.list | wc -l \
+          gene_lists/${origin}_noncoding/$cancer.$origin.noncoding.genes.list \
+        | fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list | wc -l \
         | paste <( echo -e "$cancer\t$origin\tnoncoding\t$contig" ) -
         # Add neg controls
         if [ $origin == "germline" ]; then
           fgrep -xf $WRKDIR/gencode.v47.gene_chromosome_map.$contig.tsv \
-            gene_lists/${origin}_noncoding/$nc_pheno.$origin.noncoding.genes.list | wc -l \
+            gene_lists/${origin}_noncoding/$nc_pheno.$origin.noncoding.genes.list \
+          | fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list | wc -l \
           | paste <( echo -e "${cancer}_${nc_pheno}\t$origin\tnoncoding\t$contig" ) -
         else
           fgrep -xf $WRKDIR/gencode.v47.gene_chromosome_map.$contig.tsv \
-            gene_lists/${origin}_noncoding/$cancer.$origin.noncoding.genes.list | wc -l \
+            gene_lists/${origin}_noncoding/$cancer.$origin.noncoding.genes.list \
+          | fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list | wc -l \
           | paste <( echo -e "${cancer}_${nc_pheno}\t$origin\tnoncoding\t$contig" ) -
         fi
       done
@@ -318,8 +340,10 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
           ;;
       esac
       fgrep -xf $WRKDIR/gencode.v47.gene_chromosome_map.$contig.tsv $som_coding_genes \
+      | fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list \
       | wc -l | paste <( echo -e "$cancer\tsomatic\tcoding\t$contig" ) -
       fgrep -xf $WRKDIR/gencode.v47.gene_chromosome_map.$contig.tsv $som_coding_genes \
+      | fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list \
       | wc -l | paste <( echo -e "${cancer}_${nc_pheno}\tsomatic\tcoding\t$contig" ) -
 
     done < other_data/gencode.v47.gene_counts_per_chrom.tsv
@@ -354,6 +378,7 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
           '{ if ($2==q && $3==cancer) print $1 }' \
           $OUTDIR/gene_weights.expression.cancer_specific.tsv \
         | fgrep -xf $WRKDIR/gencode.v47.gene_chromosome_map.$contig.tsv \
+        | fgrep -xf other_data/gencode.v47.autosomal.protein_coding.genes.list \
         > $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list
         
         # COSMIC germline coding
@@ -367,20 +392,20 @@ for som_coding_def in union intersection cosmic_only intogen_only; do
         | paste <( echo -e "${cancer}_${nc_pheno}\t$q\tgermline\tcoding_cosmic\t$contig" ) -
 
         # Other germline coding contributed by GWAS (after excluding COSMIC)
-        idx=$( head -n1 other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
+        idx=$( head -n1 other_data/gwas_catalog/$cancer.gwas_catalog.01_17_25.filtered.annotated.tsv \
                | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
         awk -v FS="\t" -v idx=$idx '{ if ($NF=="CDS") print $idx }' \
-          other_data/gwas_catalog/$cancer.gwas_catalog.12_05_24.filtered.annotated.tsv \
+          other_data/gwas_catalog/$cancer.gwas_catalog.01_17_25.filtered.annotated.tsv \
         | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
         | fgrep -xvf $WRKDIR/cosmic_tmp/germline_coding/$cancer.germline.coding.genes.list \
         | fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
         | wc -l | paste <( echo -e "$cancer\t$q\tgermline\tcoding_gwas\t$contig" ) -
 
         # Add negative control GWAS (after excluding GeneBass)
-        idx=$( head -n1 other_data/gwas_catalog/$nc_pheno.gwas_catalog.01_13_25.filtered.annotated.tsv \
+        idx=$( head -n1 other_data/gwas_catalog/$nc_pheno.gwas_catalog.01_17_25.filtered.annotated.tsv \
                | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
         awk -v FS="\t" -v idx=$idx '{ if ($NF=="CDS") print $idx }' \
-          other_data/gwas_catalog/$nc_pheno.gwas_catalog.01_13_25.filtered.annotated.tsv \
+          other_data/gwas_catalog/$nc_pheno.gwas_catalog.01_17_25.filtered.annotated.tsv \
         | sed 's/, /\n/g' | sed 's/ - /\n/g' | sort | uniq \
         | fgrep -xvf $WRKDIR/genebass_tmp/germline_coding/$nc_pheno.germline.coding.genes.list \
         | fgrep -xf $WRKDIR/gex_elig_lists_tmp/$cancer.gex_q$q.genes.list \
@@ -436,7 +461,7 @@ done
 
 
 ################
-# 11. Clean up #
+# 12. Clean up #
 ################
 rm -rf $WRKDIR
 

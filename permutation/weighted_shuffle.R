@@ -61,7 +61,7 @@ args <- parser$parse_args()
 # # DEV (single):
 # args <- list("tsv_in" = "/Users/ryan/Partners HealthCare Dropbox/Ryan Collins/VanAllen/VALab_germline_somatic_2023/other_data/permutation_weights/gene_weights.composite_germline_noncoding.tsv",
 #              "seed" = "0btgecc1",
-#              "eligible_genes" = "/Users/ryan/Partners HealthCare Dropbox/Ryan Collins/VanAllen/VALab_germline_somatic_2023/other_data/gencode.v47.autosomal.protein_coding.genes.list",
+#              "eligible_genes" = "/Users/ryan/Partners HealthCare Dropbox/Ryan Collins/VanAllen/VALab_germline_somatic_2023/other_data/gencode.v47.autosomal.protein_coding.ebi_ppi_universe.genes.list",
 #              "no_zero_weights" = TRUE,
 #              "outfile" = "~/scratch/shuffled_genes.dev.list")
 

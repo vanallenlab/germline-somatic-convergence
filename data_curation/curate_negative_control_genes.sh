@@ -33,8 +33,8 @@ done < other_data/negative_control_phenotype_pairs.tsv
 # Filter germline loci from GWAS catalog
 while read cancer pheno; do
   $CODEDIR/data_curation/filter_gwas_loci.R \
-    other_data/gwas_catalog/$pheno.gwas_catalog.01_13_25.unfiltered.tsv \
-    other_data/gwas_catalog/$pheno.gwas_catalog.01_13_25.filtered.tsv
+    other_data/gwas_catalog/$pheno.gwas_catalog.01_17_25.unfiltered.tsv \
+    other_data/gwas_catalog/$pheno.gwas_catalog.01_17_25.filtered.tsv
 done < other_data/negative_control_phenotype_pairs.tsv
 
 
@@ -42,16 +42,16 @@ done < other_data/negative_control_phenotype_pairs.tsv
 while read cancer pheno; do
   echo $pheno
   $CODEDIR/data_curation/annotate_gwas_catalog.py \
-    --tsv-in other_data/gwas_catalog/$pheno.gwas_catalog.01_13_25.filtered.tsv \
+    --tsv-in other_data/gwas_catalog/$pheno.gwas_catalog.01_17_25.filtered.tsv \
     --gtf ~/Desktop/Collins/VanAllen/germline_somatic_convergence/data/gencode/gencode.v47.annotation.gtf.gz \
     --eligible-genes other_data/gencode.v47.autosomal.protein_coding.genes.list \
-    --tsv-out other_data/gwas_catalog/$pheno.gwas_catalog.01_13_25.filtered.annotated.tsv
+    --tsv-out other_data/gwas_catalog/$pheno.gwas_catalog.01_17_25.filtered.annotated.tsv
 done < other_data/negative_control_phenotype_pairs.tsv
 
 
 # Divide GWAS catalog into coding & noncoding subsets
 while read cancer pheno; do
-  gwas_tsv=other_data/gwas_catalog/$pheno.gwas_catalog.01_13_25.filtered.annotated.tsv
+  gwas_tsv=other_data/gwas_catalog/$pheno.gwas_catalog.01_17_25.filtered.annotated.tsv
   idx=$( head -n1 $gwas_tsv | sed 's/\t/\n/g' | awk '{ if ($1=="MAPPED_GENE") print NR }' )
 
   # Combine coding genes with GeneBass genes
