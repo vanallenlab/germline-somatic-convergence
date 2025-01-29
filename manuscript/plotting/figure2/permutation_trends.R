@@ -109,7 +109,7 @@ prep.paired.swarm <- function(xlims=c(0, 11), ylims=c(min.lfc, max.lfc),
 }
 
 # Function to plot connected swarms of log2(fold) between 2+ sets of points
-swarm.sequence <- function(stats.list, column="lfc", pt.cex=0.65,
+swarm.sequence <- function(stats.list, column="lfc", pt.cex=0.85,
                          top.keys=c("cancer", "germline", "somatic", "criteria")){
   # Confirm the same number of rows appears in all stats.list
   if(length(unique(sapply(stats.list, nrow))) > 1){
@@ -133,16 +133,16 @@ swarm.sequence <- function(stats.list, column="lfc", pt.cex=0.65,
     if(i < n.swarms){
       next.xy <- swarm.xy[[i+1]]
       segments(x0=this.xy$x, x1=next.xy$x, y0=this.xy$y, y1=next.xy$y,
-               col=pw.params$linecol)
+               col=pw.params$linecol, lwd=1.5*0.85)
       # sapply(this.df$cancer, function(cancer){cancer.palettes[[cancer]][["light2"]]})
       segments(x0=this.xy[top.idx, "x"], x1=next.xy[top.idx, "x"],
-               y0=this.xy[top.idx, "y"], y1=next.xy[top.idx, "y"], lwd=2)
+               y0=this.xy[top.idx, "y"], y1=next.xy[top.idx, "y"], lwd=3*0.85)
     }
     points(this.xy[-top.idx, ], pch=pw.params$pwpch[-top.idx], cex=pt.cex,
            bg=pw.params$pwbg[-top.idx], col=pw.params$pwcol[-top.idx], xpd=T)
     points(this.xy[-top.idx, ], pch=pw.params$pwsym[-top.idx],
            cex=0.7*pt.cex, col="white", xpd=T)
-    points(this.xy[top.idx, ], pch=pw.params$pwpch[top.idx], cex=2*pt.cex,
+    points(this.xy[top.idx, ], pch=pw.params$pwpch[top.idx], cex=1.5*pt.cex,
            bg=pw.params$pwbg[top.idx], col=pw.params$pwcol[top.idx], xpd=T)
   }
 }
